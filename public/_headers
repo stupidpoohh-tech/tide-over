@@ -1,0 +1,20 @@
+# Cloudflare Pages 용 헤더. Vite가 public/ 안의 파일을 dist/ 루트로 그대로 복사한다.
+# Vercel에 올릴 때는 이 파일 대신 vercel.json이 쓰인다.
+
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: no-referrer
+  # 이 앱은 어떤 외부 리소스도 부르지 않고 어디로도 요청을 보내지 않는다.
+  # 백업 링크의 상태 전체가 URL에 담기므로, referrer가 새는 것부터 막는다.
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; font-src 'self'; connect-src 'self'; base-uri 'self'; form-action 'none'; frame-ancestors 'none'; object-src 'none'
+  Permissions-Policy: geolocation=(), camera=(), microphone=(), interest-cohort=()
+
+# 파일명에 해시가 붙으므로 영구 캐시해도 안전하다.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+
+# index.html은 항상 다시 확인해야 새 배포가 바로 반영된다.
+/
+  Cache-Control: no-cache
+/index.html
+  Cache-Control: no-cache
