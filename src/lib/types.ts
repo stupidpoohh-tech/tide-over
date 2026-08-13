@@ -1,17 +1,22 @@
-import type { ISODate } from './date';
+import { type ISODate, formatShortDate } from './date';
 
 export type EntryKind = 'income' | 'expense';
 
 /**
- * 반복 규칙. 세 가지뿐이다.
+ * 반복 규칙. 네 가지다.
  * - once:    특정 일자 한 번.
  * - monthly: 매달 며칠. 그 달에 없는 날짜면 말일로 당겨진다.
  * - every:   anchor부터 N일마다. 1주는 7, 열흘은 10.
+ * - span:    기간 예산(생활비). 총액을 기간 전체로 잡는다.
+ *            표시는 총액 한 줄이지만, 계산은 하루 단위로 나눠 반영된다 —
+ *            그래야 기간 중간에 잔고를 다시 적어도 정산이 어긋나지 않고,
+ *            마지막 날이 지나면 정확히 총액만큼 빠진다.
  */
 export type Schedule =
   | { type: 'once'; date: ISODate }
   | { type: 'monthly'; day: number }
-  | { type: 'every'; days: number; anchor: ISODate };
+  | { type: 'every'; days: number; anchor: ISODate }
+  | { type: 'span'; start: ISODate; end: ISODate };
 
 /** 예정된 입금 또는 출금 한 건. */
 export type Entry = {
@@ -94,6 +99,9 @@ function isSchedule(value: unknown): value is Schedule {
       isISODate(s.anchor)
     );
   }
+  if (s.type === 'span') {
+    return isISODate(s.start) && isISODate(s.end) && s.start <= s.end;
+  }
   return false;
 }
 
@@ -115,5 +123,8 @@ export function newId(): string {
 export function describeSchedule(schedule: Schedule): string {
   if (schedule.type === 'monthly') return `매달 ${schedule.day}일`;
   if (schedule.type === 'every') return `${schedule.days}일마다`;
-  return schedule.date;
+  if (schedule.type === 'span') {
+    return `${formatShortDate(schedule.start)}~${formatShortDate(schedule.end)} 기간`;
+  }
+  return formatShortDate(schedule.date);
 }

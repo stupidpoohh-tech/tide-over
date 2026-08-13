@@ -8,6 +8,7 @@ import {
   netBetween,
   occurrences,
   settle,
+  summarize,
   upcomingInHorizon,
 } from './calc';
 import type { Entry, State } from './types';
@@ -127,6 +128,72 @@ describe('occurrences — N일마다', () => {
   });
 });
 
+const span = (
+  id: string,
+  name: string,
+  amount: number,
+  start: string,
+  end: string,
+  kind: Entry['kind'] = 'expense',
+): Entry => ({ id, name, amount, kind, schedule: { type: 'span', start, end } });
+
+describe('occurrences — 기간 예산(생활비)', () => {
+  it('하루 몫으로 나뉘고, 합은 정확히 총액이다 (나머지는 마지막 날)', () => {
+    // 100,000원 / 11일 = 9,090 × 10일 + 9,100 (마지막 날)
+    const list = occurrences([span('a', '생활비', 100_000, '2026-03-05', '2026-03-15')], '2026-03-01', '2026-03-31');
+    expect(list).toHaveLength(11);
+    expect(list[0]).toMatchObject({ date: '2026-03-05', amount: 9_090 });
+    expect(list.at(-1)).toMatchObject({ date: '2026-03-15', amount: 9_100 });
+    expect(list.reduce((t, o) => t + o.amount, 0)).toBe(100_000);
+  });
+
+  it('마지막 날이 지나면 정확히 총액만큼 빠진 상태가 된다', () => {
+    const entries = [span('a', '생활비', 100_000, '2026-03-05', '2026-03-15')];
+    expect(netBetween(entries, '2026-03-04', '2026-03-15')).toBe(-100_000);
+    expect(netBetween(entries, '2026-03-04', '2026-03-31')).toBe(-100_000);
+  });
+
+  it('구간 경계도 (after, through] 규칙을 따른다', () => {
+    const entries = [span('a', '생활비', 100_000, '2026-03-05', '2026-03-15')];
+    // 3/10까지 지나간 몫 + 3/10 이후 남은 몫 = 총액
+    const passed = netBetween(entries, '2026-03-04', '2026-03-10');
+    const remaining = netBetween(entries, '2026-03-10', '2026-03-15');
+    expect(passed + remaining).toBe(-100_000);
+    expect(passed).toBe(-9_090 * 6);
+  });
+
+  it('기간 시작 전에는 아무것도 빠지지 않는다', () => {
+    const entries = [span('a', '생활비', 100_000, '2026-03-05', '2026-03-15')];
+    expect(netBetween(entries, '2026-03-01', '2026-03-04')).toBe(0);
+  });
+
+  it('하루짜리 기간은 그 날 총액 그대로다', () => {
+    const list = occurrences([span('a', '경조사', 50_000, '2026-03-10', '2026-03-10')], '2026-03-01', '2026-03-31');
+    expect(list).toEqual([
+      { date: '2026-03-10', entry: expect.anything(), amount: 50_000 },
+    ]);
+  });
+});
+
+describe('summarize', () => {
+  it('기간 예산의 하루 발생분들을 한 줄로 합친다', () => {
+    const entries = [
+      span('a', '생활비', 100_000, '2026-03-05', '2026-03-15'),
+      out('b', '월세', 600_000, 10),
+    ];
+    const groups = summarize(occurrences(entries, '2026-03-04', '2026-03-31'));
+    expect(groups).toHaveLength(2);
+    const living = groups.find((g) => g.entry.name === '생활비');
+    expect(living).toMatchObject({ from: '2026-03-05', to: '2026-03-15', amount: 100_000 });
+  });
+
+  it('기간 중간부터 요약하면 남은 몫만 담긴다', () => {
+    const entries = [span('a', '생활비', 100_000, '2026-03-05', '2026-03-15')];
+    const groups = summarize(occurrences(entries, '2026-03-10', '2026-03-31'));
+    expect(groups[0]).toMatchObject({ from: '2026-03-11', to: '2026-03-15', amount: 100_000 - 9_090 * 6 });
+  });
+});
+
 describe('entriesOn', () => {
   it('그 날 하루치만 뽑는다', () => {
     const entries = [
@@ -171,6 +238,14 @@ describe('horizonOf — 주기는 다음 예정 입금 전날까지', () => {
   it('예정 입금이 없으면 30일 기준으로 본다', () => {
     expect(horizonOf([], '2026-03-07')).toEqual({ end: '2026-04-06', nextIncome: null });
     expect(horizonOf([out('a', '월세', 1, 10)], '2026-03-07').nextIncome).toBeNull();
+  });
+
+  it('기간 입금은 주기 기준이 되지 않는다 — 매일 조금씩 들어오는 흐름은 입금일이 아니다', () => {
+    const h = horizonOf(
+      [span('a', '용돈', 100_000, '2026-03-08', '2026-03-20', 'income'), inc('b', '급여', 0, 25)],
+      '2026-03-07',
+    );
+    expect(h.nextIncome).toBe('2026-03-25');
   });
 });
 
@@ -281,6 +356,25 @@ describe('settle', () => {
     expect(result.diff).toBe(0);
   });
 
+  it('생활비 기간 중간에 정산하면 일할 페이스가 기준이 된다', () => {
+    const s = state({
+      balance: { amount: 300_000, checkedAt: '2026-03-04T09:00:00+09:00' },
+      entries: [span('a', '생활비', 100_000, '2026-03-05', '2026-03-15')],
+    });
+    // 3/10까지 6일치 = 9,090 × 6 = 54,540원이 예정 페이스.
+    const result = settle(s, 245_460, new Date('2026-03-10T09:00:00+09:00'));
+    expect(result.passedOut).toBe(54_540);
+    expect(result.expected).toBe(245_460);
+    expect(result.diff).toBe(0);
+    // 정산 후에도 남은 기간 몫만 한도에서 빠진다 — 이중 차감이 없다.
+    const after = state({
+      ...s,
+      balance: { amount: 245_460, checkedAt: '2026-03-10T09:00:00+09:00' },
+    });
+    expect(limitOn(after, '2026-03-15', '2026-03-10')).toBe(245_460 - (100_000 - 54_540));
+    expect(limitOn(after, '2026-03-15', '2026-03-10')).toBe(200_000);
+  });
+
   it('한 달을 통째로 건너뛰어도 지나간 예정을 모두 센다', () => {
     const s = state({
       balance: { amount: 3_000_000, checkedAt: '2026-01-05T09:00:00+09:00' },
@@ -300,6 +394,7 @@ describe('구간 규칙의 일관성', () => {
       inc('b', '부수입', 200_000, 15),
       once('c', '경조사', 50_000, '2026-03-18'),
       every('d', '적금', 30_000, 7, '2026-03-05'),
+      span('e', '생활비', 100_000, '2026-03-08', '2026-03-20'),
     ];
     const passed = netBetween(entries, '2026-03-07', '2026-03-12');
     const remaining = netBetween(entries, '2026-03-12', '2026-04-24');

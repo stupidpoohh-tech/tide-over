@@ -1,6 +1,6 @@
 import { type State, isState, newId } from './types';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 const SCHEMA_KEY = 'tideover.schema';
 const STATE_KEY = 'tideover.state';
@@ -123,6 +123,12 @@ const MIGRATIONS: Record<number, (data: unknown) => unknown> = {
 
     return { balance: old.balance, entries };
   },
+  /**
+   * v4: 스케줄에 span(기간 예산)이 추가됐다. 기존 데이터의 모양은 그대로라
+   * 변환은 없지만, v3 코드가 span이 든 데이터를 "깨졌다"고 읽는 대신
+   * "더 최신 버전"으로 정중히 거절하도록 버전만 올린다.
+   */
+  3: (data) => data,
 };
 
 /**

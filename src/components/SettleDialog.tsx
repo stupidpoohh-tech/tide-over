@@ -1,5 +1,5 @@
 import { useId, useState } from 'react';
-import { formatSignedWon, formatWon, settle } from '../lib/calc';
+import { formatSignedWon, formatWon, settle, summarize } from '../lib/calc';
 import { formatInstant, formatShortDate } from '../lib/date';
 import type { State } from '../lib/types';
 import { Modal, ModalHeader } from './Modal';
@@ -67,14 +67,19 @@ export function SettleDialog({ state, onSave, onClose }: Props) {
         </div>
         {result.passed.length > 0 && (
           <ul className="mini-list mini-list--indent">
-            {result.passed.map((o, i) => (
-              <li key={`${o.date}-${o.entry.id}-${i}`}>
+            {summarize(result.passed).map((g) => (
+              <li key={g.key}>
                 <span>
-                  <span className="muted">{formatShortDate(o.date)}</span> {o.entry.name}
+                  <span className="muted">
+                    {g.from === g.to
+                      ? formatShortDate(g.from)
+                      : `${formatShortDate(g.from)}~${formatShortDate(g.to)}`}
+                  </span>{' '}
+                  {g.entry.name}
                 </span>
-                <span className={o.entry.kind === 'income' ? 'is-income' : ''}>
-                  {o.entry.kind === 'income' ? '+' : '−'}
-                  {formatWon(o.entry.amount)}
+                <span className={g.entry.kind === 'income' ? 'is-income' : ''}>
+                  {g.entry.kind === 'income' ? '+' : '−'}
+                  {formatWon(g.amount)}
                 </span>
               </li>
             ))}

@@ -1,13 +1,11 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { backupLink } from '../lib/backup';
-import { formatWon } from '../lib/calc';
-import { formatInstant, fromISODate, todayISO } from '../lib/date';
+import { formatWon, occurrences } from '../lib/calc';
+import { type ISODate, addDays, compareDate, formatDate, formatInstant, todayISO } from '../lib/date';
 import { copyText } from '../lib/clipboard';
 import type { PersistenceStatus } from '../lib/storage';
-import { type Entry, type Schedule, type State, signedAmount } from '../lib/types';
+import { type Entry, type State, describeSchedule, signedAmount } from '../lib/types';
 import { EntryDialog } from './EntryDialog';
-import { KindToggle } from './KindToggle';
-import { MoneyInput } from './MoneyInput';
 import { RestoreField, extractPayload } from './WipedNotice';
 
 type Props = {
@@ -37,14 +35,30 @@ export function SettingsScreen({
   const [restoreInput, setRestoreInput] = useState('');
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [editing, setEditing] = useState<Entry | null>(null);
+
+  const today = todayISO();
 
   function update(patch: Partial<State>) {
     onSave({ ...state, ...patch });
   }
 
-  function updateEntry(id: string, patch: Partial<Entry>) {
-    update({ entries: state.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
-  }
+  /** 다음 발생일로 묶는다. 발생이 끝난 항목은 맨 아래 "지난 항목"으로. */
+  const groups = useMemo(() => {
+    const horizonEnd = addDays(today, 400);
+    const map = new Map<string, { date: ISODate | null; items: Entry[] }>();
+    for (const entry of state.entries) {
+      const next = occurrences([entry], addDays(today, -1), horizonEnd)[0]?.date ?? null;
+      const key = next ?? 'past';
+      if (!map.has(key)) map.set(key, { date: next, items: [] });
+      map.get(key)?.items.push(entry);
+    }
+    return [...map.values()].sort((a, b) => {
+      if (a.date === null) return 1;
+      if (b.date === null) return -1;
+      return compareDate(a.date, b.date);
+    });
+  }, [state.entries, today]);
 
   async function makeBackup() {
     const url = backupLink(state);
@@ -68,20 +82,40 @@ export function SettingsScreen({
         <h2 className="card__title">예정 수입·지출</h2>
         <p className="muted">
           급여도 여기서 예정 입금으로 관리합니다 — 머리 숫자는 다음 예정 입금 전날까지로
-          계산됩니다. 반복은 한 번 / 매달 며칠 / N일마다(1주=7) 중에 고릅니다.
+          계산됩니다. 카드를 누르면 수정할 수 있습니다.
         </p>
 
-        {state.entries.length > 0 && (
-          <ul className="entry-list">
-            {state.entries.map((entry) => (
-              <EntryRow
-                key={entry.id}
-                entry={entry}
-                onChange={(patch) => updateEntry(entry.id, patch)}
-                onRemove={() => update({ entries: state.entries.filter((e) => e.id !== entry.id) })}
-              />
+        {state.entries.length === 0 ? (
+          <p className="muted">아직 예정된 입금·출금이 없습니다.</p>
+        ) : (
+          <div className="entry-cards">
+            {groups.map((g) => (
+              <div key={g.date ?? 'past'} className="egroup">
+                <h3 className="egroup__date">{g.date ? formatDate(g.date) : '지난 항목'}</h3>
+                {g.items.map((entry) => (
+                  <button
+                    key={entry.id}
+                    type="button"
+                    className="ecard"
+                    onClick={() => setEditing(entry)}
+                  >
+                    <span
+                      className={`ecard__dot ${entry.kind === 'income' ? 'is-income' : 'is-expense'}`}
+                      aria-hidden="true"
+                    />
+                    <span className="ecard__main">
+                      <b>{entry.name || '(이름 없음)'}</b>
+                      <span className="muted">{describeSchedule(entry.schedule)}</span>
+                    </span>
+                    <span className={`ecard__amt ${entry.kind === 'income' ? 'is-income' : ''}`}>
+                      {entry.kind === 'income' ? '+' : '−'}
+                      {formatWon(entry.amount)}
+                    </span>
+                  </button>
+                ))}
+              </div>
             ))}
-          </ul>
+          </div>
         )}
 
         <button
@@ -193,153 +227,26 @@ export function SettingsScreen({
 
       {adding && (
         <EntryDialog
-          today={todayISO()}
+          today={today}
           onAdd={(entry) => update({ entries: [...state.entries, entry] })}
           onRemove={(id) => update({ entries: state.entries.filter((e) => e.id !== id) })}
           onClose={() => setAdding(false)}
         />
       )}
+
+      {editing && (
+        <EntryDialog
+          today={today}
+          initial={editing}
+          onUpdate={(entry) =>
+            update({ entries: state.entries.map((e) => (e.id === entry.id ? entry : e)) })
+          }
+          onRemove={(id) => update({ entries: state.entries.filter((e) => e.id !== id) })}
+          onClose={() => setEditing(null)}
+        />
+      )}
     </div>
   );
-}
-
-function EntryRow({
-  entry,
-  onChange,
-  onRemove,
-}: {
-  entry: Entry;
-  onChange: (patch: Partial<Entry>) => void;
-  onRemove: () => void;
-}) {
-  /** 반복 방식을 바꿀 때 기존 정보에서 최대한 자연스러운 기본값을 만든다. */
-  function changeType(t: Schedule['type']) {
-    const s = entry.schedule;
-    if (t === s.type) return;
-    if (t === 'monthly') {
-      const base = s.type === 'once' ? s.date : s.type === 'every' ? s.anchor : null;
-      if (base === null) return;
-      onChange({ schedule: { type: 'monthly', day: fromISODate(base).getDate() } });
-    } else if (t === 'once') {
-      const date =
-        s.type === 'monthly' ? monthlyToDate(s.day) : s.type === 'every' ? s.anchor : s.date;
-      onChange({ schedule: { type: 'once', date } });
-    } else {
-      const anchor = s.type === 'once' ? s.date : monthlyToDate(s.type === 'monthly' ? s.day : 1);
-      onChange({ schedule: { type: 'every', days: 7, anchor } });
-    }
-  }
-
-  return (
-    <li className="entry-row">
-      <div className="entry-row__top">
-        <KindToggle value={entry.kind} onChange={(kind) => onChange({ kind })} />
-        <input
-          type="text"
-          className="entry-row__name"
-          value={entry.name}
-          placeholder="이름"
-          aria-label="이름"
-          onChange={(e) => onChange({ name: e.target.value })}
-        />
-        <button
-          type="button"
-          className="icon-btn icon-btn--danger"
-          aria-label={`${entry.name} 삭제`}
-          onClick={onRemove}
-        >
-          ×
-        </button>
-      </div>
-
-      <div className="entry-row__bottom">
-        <div className="entry-row__amount">
-          <MoneyInput value={entry.amount} onChange={(amount) => onChange({ amount })} />
-        </div>
-
-        <select
-          value={entry.schedule.type}
-          aria-label="반복"
-          onChange={(e) => changeType(e.target.value as Schedule['type'])}
-        >
-          <option value="once">특정 일자</option>
-          <option value="monthly">매달</option>
-          <option value="every">N일마다</option>
-        </select>
-
-        {entry.schedule.type === 'monthly' ? (
-          <span className="entry-row__day">
-            <input
-              type="number"
-              min={1}
-              max={31}
-              inputMode="numeric"
-              value={entry.schedule.day}
-              aria-label="반복일"
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                if (Number.isInteger(n) && n >= 1 && n <= 31) {
-                  onChange({ schedule: { type: 'monthly', day: n } });
-                }
-              }}
-            />
-            <span>일</span>
-          </span>
-        ) : entry.schedule.type === 'once' ? (
-          <input
-            type="date"
-            value={entry.schedule.date}
-            aria-label="날짜"
-            onChange={(e) => {
-              if (e.target.value) onChange({ schedule: { type: 'once', date: e.target.value } });
-            }}
-          />
-        ) : (
-          <>
-            <span className="entry-row__day">
-              <input
-                type="number"
-                min={1}
-                max={365}
-                inputMode="numeric"
-                value={entry.schedule.days}
-                aria-label="반복 주기"
-                onChange={(e) => {
-                  const n = Number(e.target.value);
-                  if (Number.isInteger(n) && n >= 1 && n <= 365 && entry.schedule.type === 'every') {
-                    onChange({ schedule: { ...entry.schedule, days: n } });
-                  }
-                }}
-              />
-              <span>일마다</span>
-            </span>
-            <input
-              type="date"
-              value={entry.schedule.anchor}
-              aria-label="시작일"
-              onChange={(e) => {
-                if (e.target.value && entry.schedule.type === 'every') {
-                  onChange({ schedule: { ...entry.schedule, anchor: e.target.value } });
-                }
-              }}
-            />
-          </>
-        )}
-      </div>
-    </li>
-  );
-}
-
-/** 매달 N일을 특정 일자로 바꿀 때, 이번 달(또는 다음 달) 그 날짜를 기본값으로 준다. */
-function monthlyToDate(day: number): string {
-  const today = todayISO();
-  const d = fromISODate(today);
-  const candidate = new Date(d.getFullYear(), d.getMonth(), day);
-  if (candidate < d) candidate.setMonth(candidate.getMonth() + 1);
-  const y = candidate.getFullYear();
-  const m = String(candidate.getMonth() + 1).padStart(2, '0');
-  const dd = String(candidate.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
 }
 
 function describePersistence(status: PersistenceStatus): string {

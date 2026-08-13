@@ -7,6 +7,7 @@ import {
   headlineLimit,
   horizonOf,
   limitOn,
+  summarize,
   totalIn,
   totalOut,
   upcomingInHorizon,
@@ -46,6 +47,7 @@ export function CalendarScreen({ state, today, onSave }: Props) {
   }));
   const [selected, setSelected] = useState<ISODate | null>(null);
   const [editingBalance, setEditingBalance] = useState(false);
+  const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
 
   const horizon = useMemo(() => horizonOf(state.entries, today), [state.entries, today]);
   const headline = useMemo(() => headlineLimit(state, today), [state, today]);
@@ -73,6 +75,10 @@ export function CalendarScreen({ state, today, onSave }: Props) {
 
   function removeEntry(id: string) {
     onSave({ ...state, entries: state.entries.filter((e) => e.id !== id) });
+  }
+
+  function updateEntry(entry: Entry) {
+    onSave({ ...state, entries: state.entries.map((e) => (e.id === entry.id ? entry : e)) });
   }
 
   return (
@@ -194,21 +200,50 @@ export function CalendarScreen({ state, today, onSave }: Props) {
                 }`}
               >
                 <span className="day__num">{fromISODate(cell.date).getDate()}</span>
-                {cell.items.map((o) => (
-                  <span
-                    key={o.entry.id}
-                    className={`day__item ${o.entry.kind === 'income' ? 'is-income' : ''}`}
-                  >
-                    <span className="day__item-name">{o.entry.name}</span>
-                    <span className="day__item-amt">
-                      {o.entry.kind === 'income' ? '+' : '−'}
-                      {compact(o.entry.amount)}
+                {cell.items
+                  .filter((o) => o.entry.schedule.type !== 'span')
+                  .map((o) => (
+                    <span
+                      key={o.entry.id}
+                      className={`day__item ${o.entry.kind === 'income' ? 'is-income' : ''}`}
+                    >
+                      <span className="day__item-name">{o.entry.name}</span>
+                      <span className="day__item-amt">
+                        {o.entry.kind === 'income' ? '+' : '−'}
+                        {compact(o.amount)}
+                      </span>
                     </span>
-                  </span>
-                ))}
+                  ))}
                 {!cell.isPast && (
                   <span className={`day__limit ${cell.limit < 0 ? 'is-negative' : ''}`}>
                     {compact(cell.limit)}
+                  </span>
+                )}
+                {cell.spans.length > 0 && (
+                  <span className="day__bars">
+                    {cell.spans.map((sp) => {
+                      const segStart = sp.isStart || col === 0;
+                      const segEnd = sp.isEnd || col === 6;
+                      return (
+                        <span
+                          key={sp.entry.id}
+                          className={[
+                            'allow',
+                            sp.entry.kind === 'income' ? 'allow--income' : '',
+                            segStart ? 'allow--start' : '',
+                            segEnd ? 'allow--end' : '',
+                          ]
+                            .filter(Boolean)
+                            .join(' ')}
+                        >
+                          {segStart && (
+                            <span className="allow__label">
+                              {sp.entry.name} {compact(sp.entry.amount)}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })}
                   </span>
                 )}
               </button>
@@ -236,15 +271,19 @@ export function CalendarScreen({ state, today, onSave }: Props) {
           </p>
         ) : (
           <ul className="list">
-            {upcoming.map((o) => (
-              <li key={`${o.date}-${o.entry.id}`}>
-                <span className="list__date">{formatShortDate(o.date)}</span>
-                <span className="list__name">{o.entry.name}</span>
-                <span className={`list__amount ${o.entry.kind === 'income' ? 'is-income' : ''}`}>
-                  {o.entry.kind === 'income' ? '+' : '−'}
-                  {formatWon(o.entry.amount)}
+            {summarize(upcoming).map((g) => (
+              <li key={g.key}>
+                <span className="list__date">
+                  {g.from === g.to
+                    ? formatShortDate(g.from)
+                    : `${formatShortDate(g.from)}~${formatShortDate(g.to)}`}
                 </span>
-                <span className="list__after">→ {formatWon(limitOn(state, o.date, today))}</span>
+                <span className="list__name">{g.entry.name}</span>
+                <span className={`list__amount ${g.entry.kind === 'income' ? 'is-income' : ''}`}>
+                  {g.entry.kind === 'income' ? '+' : '−'}
+                  {formatWon(g.amount)}
+                </span>
+                <span className="list__after">→ {formatWon(limitOn(state, g.to, today))}</span>
               </li>
             ))}
           </ul>
@@ -263,7 +302,21 @@ export function CalendarScreen({ state, today, onSave }: Props) {
           today={today}
           onAdd={addEntry}
           onRemove={removeEntry}
+          onEdit={(entry) => {
+            setSelected(null);
+            setEditingEntry(entry);
+          }}
           onClose={() => setSelected(null)}
+        />
+      )}
+
+      {editingEntry && (
+        <EntryDialog
+          today={today}
+          initial={editingEntry}
+          onUpdate={updateEntry}
+          onRemove={removeEntry}
+          onClose={() => setEditingEntry(null)}
         />
       )}
 
@@ -316,6 +369,8 @@ type Cell = {
   date: ISODate;
   limit: number;
   items: Occurrence[];
+  /** 이 날짜를 덮는 기간 예산들. 셀 하단에 이어지는 막대로 그린다. */
+  spans: Array<{ entry: Entry; isStart: boolean; isEnd: boolean }>;
   isPast: boolean;
   isToday: boolean;
   /** 오늘부터 머리 숫자 끝점까지 — 달력에서 색으로 이어 보여주는 구간. */
@@ -334,12 +389,27 @@ function buildMonth(
 
   const cells: (Cell | null)[] = Array.from({ length: leading }, () => null);
 
+  const spanEntries = state.entries.filter((e) => e.schedule.type === 'span');
+
   for (let day = 1; day <= total; day += 1) {
     const date = toISODate(new Date(year, month0, day));
+    const spans = spanEntries
+      .filter(
+        (e) =>
+          e.schedule.type === 'span' &&
+          compareDate(e.schedule.start, date) <= 0 &&
+          compareDate(date, e.schedule.end) <= 0,
+      )
+      .map((entry) => ({
+        entry,
+        isStart: entry.schedule.type === 'span' && entry.schedule.start === date,
+        isEnd: entry.schedule.type === 'span' && entry.schedule.end === date,
+      }));
     cells.push({
       date,
       limit: limitOn(state, date, today),
       items: entriesOn(state.entries, date),
+      spans,
       isPast: compareDate(date, today) < 0,
       isToday: date === today,
       inBand: compareDate(date, today) >= 0 && compareDate(date, horizon.end) <= 0,

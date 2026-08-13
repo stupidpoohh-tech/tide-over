@@ -123,6 +123,18 @@ describe('migrateToCurrent', () => {
     ).toBeNull();
   });
 
+  it('span 스케줄을 검증한다 — 끝이 시작보다 앞서면 거부', () => {
+    const base = { balance: { amount: 0, checkedAt: '2026-03-07T09:00:00.000Z' } };
+    const mk = (start: string, end: string) => ({
+      ...base,
+      entries: [
+        { id: 'x', name: '생활비', amount: 100_000, kind: 'expense', schedule: { type: 'span', start, end } },
+      ],
+    });
+    expect(migrateToCurrent(mk('2026-03-05', '2026-03-15'), SCHEMA_VERSION)).not.toBeNull();
+    expect(migrateToCurrent(mk('2026-03-15', '2026-03-05'), SCHEMA_VERSION)).toBeNull();
+  });
+
   it('변환 경로가 없는 버전은 null이다', () => {
     expect(migrateToCurrent(v1, 0)).toBeNull();
   });

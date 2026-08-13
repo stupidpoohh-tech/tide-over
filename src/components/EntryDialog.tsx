@@ -1,6 +1,14 @@
 import { useId, useState } from 'react';
 import { type Occurrence, formatWon } from '../lib/calc';
-import { type ISODate, addDays, compareDate, formatDate, fromISODate } from '../lib/date';
+import {
+  type ISODate,
+  addDays,
+  compareDate,
+  formatDate,
+  fromISODate,
+  todayISO,
+  toISODate,
+} from '../lib/date';
 import { type Entry, type EntryKind, type Schedule, newId } from '../lib/types';
 import { Modal, ModalHeader } from './Modal';
 import { MoneyInput } from './MoneyInput';
@@ -19,30 +27,45 @@ type Repeat = Schedule['type'];
 type Props = {
   day?: DayContext;
   today: ISODate;
-  onAdd: (entry: Entry) => void;
+  /** 있으면 수정 모드 — 폼이 이 항목으로 채워진다. */
+  initial?: Entry;
+  onAdd?: (entry: Entry) => void;
+  onUpdate?: (entry: Entry) => void;
   onRemove: (id: string) => void;
+  /** 목록의 항목을 눌러 수정으로 넘어갈 때. */
+  onEdit?: (entry: Entry) => void;
   onClose: () => void;
 };
 
-export function EntryDialog({ day, today, onAdd, onRemove, onClose }: Props) {
+export function EntryDialog({ day, today, initial, onAdd, onUpdate, onRemove, onEdit, onClose }: Props) {
   const titleId = useId();
 
-  const [kind, setKind] = useState<EntryKind>('expense');
-  const [name, setName] = useState('');
-  const [amount, setAmount] = useState(0);
-  const [repeat, setRepeat] = useState<Repeat>('once');
-  const [everyDays, setEveryDays] = useState(7);
-  const [date, setDate] = useState<ISODate>(() => day?.date ?? addDays(today, 1));
+  const [kind, setKind] = useState<EntryKind>(initial?.kind ?? 'expense');
+  const [name, setName] = useState(initial?.name ?? '');
+  const [amount, setAmount] = useState(initial?.amount ?? 0);
+  const [repeat, setRepeat] = useState<Repeat>(initial?.schedule.type ?? 'once');
+  const [everyDays, setEveryDays] = useState(
+    initial?.schedule.type === 'every' ? initial.schedule.days : 7,
+  );
+  const [date, setDate] = useState<ISODate>(() => {
+    if (initial) return startDateOf(initial.schedule);
+    return day?.date ?? addDays(today, 1);
+  });
+  const [spanEnd, setSpanEnd] = useState<ISODate>(() =>
+    initial?.schedule.type === 'span' ? initial.schedule.end : addDays(day?.date ?? today, 7),
+  );
 
   /** 오늘까지의 날짜는 잔고가 말해주는 구간이라 폼을 열지 않는다. */
   const readOnly = Boolean(day && (day.isPast || day.isToday));
 
   /**
-   * 한 번짜리 예정만 미래 날짜를 요구한다. 매달·N일마다 반복은
-   * 시작일이 과거여도 앞으로의 발생분이 잡히므로 막지 않는다.
+   * 새로 넣는 한 번짜리만 미래 날짜를 요구한다. 반복·기간은 시작이 과거여도
+   * 앞으로의 발생분이 잡히고, 기존 항목 수정은 과거 날짜 그대로 저장할 수 있다.
    */
-  const dateTooEarly = repeat === 'once' && date !== '' && compareDate(date, today) <= 0;
-  const canSubmit = name.trim().length > 0 && amount > 0 && date !== '' && !dateTooEarly;
+  const dateTooEarly = !initial && repeat === 'once' && date !== '' && compareDate(date, today) <= 0;
+  const spanBroken = repeat === 'span' && (spanEnd === '' || compareDate(date, spanEnd) > 0);
+  const canSubmit =
+    name.trim().length > 0 && amount > 0 && date !== '' && !dateTooEarly && !spanBroken;
 
   const dayOfMonth = date === '' ? 1 : fromISODate(date).getDate();
 
@@ -53,8 +76,12 @@ export function EntryDialog({ day, today, onAdd, onRemove, onClose }: Props) {
         ? { type: 'monthly', day: dayOfMonth }
         : repeat === 'every'
           ? { type: 'every', days: everyDays, anchor: date }
-          : { type: 'once', date };
-    onAdd({ id: newId(), name: name.trim(), amount, kind, schedule });
+          : repeat === 'span'
+            ? { type: 'span', start: date, end: spanEnd }
+            : { type: 'once', date };
+    const entry: Entry = { id: initial?.id ?? newId(), name: name.trim(), amount, kind, schedule };
+    if (initial) onUpdate?.(entry);
+    else onAdd?.(entry);
     onClose();
   }
 
@@ -63,7 +90,7 @@ export function EntryDialog({ day, today, onAdd, onRemove, onClose }: Props) {
       <ModalHeader
         titleId={titleId}
         badge={day ? formatDate(day.date) : '예정'}
-        title={readOnly ? '이 날의 예정' : '새로 만들기'}
+        title={readOnly ? '이 날의 예정' : initial ? '수정' : '새로 만들기'}
         onClose={onClose}
       />
 
@@ -77,17 +104,24 @@ export function EntryDialog({ day, today, onAdd, onRemove, onClose }: Props) {
         <ul className="dialog-items">
           {day.items.map((o) => (
             <li key={o.entry.id}>
-              <span className="dialog-items__name">
+              <button
+                type="button"
+                className="dialog-items__name"
+                onClick={() => onEdit?.(o.entry)}
+                disabled={!onEdit}
+              >
                 {o.entry.name}
                 {o.entry.schedule.type === 'monthly' && <em className="tag">매달</em>}
                 {o.entry.schedule.type === 'every' && (
                   <em className="tag">{o.entry.schedule.days}일마다</em>
                 )}
-              </span>
+                {o.entry.schedule.type === 'span' && <em className="tag">기간</em>}
+              </button>
               <span className="dialog-items__right">
                 <span className={o.entry.kind === 'income' ? 'is-income' : 'is-expense'}>
                   {o.entry.kind === 'income' ? '+' : '−'}
-                  {formatWon(o.entry.amount)}
+                  {formatWon(o.entry.schedule.type === 'span' ? o.entry.amount : o.amount)}
+                  {o.entry.schedule.type === 'span' && <span className="muted"> 기간 전체</span>}
                 </span>
                 {!readOnly && (
                   <button
@@ -150,11 +184,11 @@ export function EntryDialog({ day, today, onAdd, onRemove, onClose }: Props) {
           </label>
 
           <label className="dialog-row">
-            <span className="dialog-row__label">날짜</span>
+            <span className="dialog-row__label">{repeat === 'span' ? '시작' : '날짜'}</span>
             <input
               type="date"
               value={date}
-              min={repeat === 'once' ? addDays(today, 1) : undefined}
+              min={!initial && repeat === 'once' ? addDays(today, 1) : undefined}
               onChange={(e) => setDate(e.target.value)}
             />
           </label>
@@ -162,30 +196,18 @@ export function EntryDialog({ day, today, onAdd, onRemove, onClose }: Props) {
           <div className="dialog-row">
             <span className="dialog-row__label">반복</span>
             <div className="chips">
-              <button
-                type="button"
-                className={`chip ${repeat === 'once' ? 'is-active' : ''}`}
-                aria-pressed={repeat === 'once'}
-                onClick={() => setRepeat('once')}
-              >
+              <RepeatChip active={repeat === 'once'} onClick={() => setRepeat('once')}>
                 한 번
-              </button>
-              <button
-                type="button"
-                className={`chip ${repeat === 'monthly' ? 'is-active' : ''}`}
-                aria-pressed={repeat === 'monthly'}
-                onClick={() => setRepeat('monthly')}
-              >
+              </RepeatChip>
+              <RepeatChip active={repeat === 'monthly'} onClick={() => setRepeat('monthly')}>
                 매달 {dayOfMonth}일
-              </button>
-              <button
-                type="button"
-                className={`chip ${repeat === 'every' ? 'is-active' : ''}`}
-                aria-pressed={repeat === 'every'}
-                onClick={() => setRepeat('every')}
-              >
+              </RepeatChip>
+              <RepeatChip active={repeat === 'every'} onClick={() => setRepeat('every')}>
                 {repeat === 'every' ? `${everyDays}일마다` : '며칠마다'}
-              </button>
+              </RepeatChip>
+              <RepeatChip active={repeat === 'span'} onClick={() => setRepeat('span')}>
+                기간
+              </RepeatChip>
             </div>
           </div>
 
@@ -210,12 +232,34 @@ export function EntryDialog({ day, today, onAdd, onRemove, onClose }: Props) {
             </div>
           )}
 
+          {repeat === 'span' && (
+            <>
+              <div className="dialog-row">
+                <span className="dialog-row__label">끝</span>
+                <input
+                  type="date"
+                  aria-label="기간 끝"
+                  value={spanEnd}
+                  min={date || undefined}
+                  onChange={(e) => setSpanEnd(e.target.value)}
+                />
+              </div>
+              <div className="dialog-row">
+                <span className="dialog-row__label" aria-hidden="true" />
+                <span className="dialog-hint">
+                  기간 전체 예산(생활비)입니다. 달력에 한 줄로 표시되고, 한도에는 하루 단위로
+                  나눠 반영돼 마지막 날이 지나면 정확히 총액만큼 빠집니다.
+                </span>
+              </div>
+            </>
+          )}
+
           <label className="dialog-row">
             <span className="dialog-row__label">내용</span>
             <input
               type="text"
               value={name}
-              placeholder="내용을 적어보세요…"
+              placeholder={repeat === 'span' ? '예: 생활비' : '내용을 적어보세요…'}
               onChange={(e) => setName(e.target.value)}
             />
           </label>
@@ -227,16 +271,65 @@ export function EntryDialog({ day, today, onAdd, onRemove, onClose }: Props) {
           )}
 
           <div className="modal__actions">
+            {initial && (
+              <button
+                type="button"
+                className="ghost-btn ghost-btn--danger modal__delete"
+                onClick={() => {
+                  onRemove(initial.id);
+                  onClose();
+                }}
+              >
+                삭제
+              </button>
+            )}
             <button type="button" className="ghost-btn" onClick={onClose}>
               취소
             </button>
             <button type="submit" className="solid-btn" disabled={!canSubmit}>
-              추가
+              {initial ? '저장' : '추가'}
             </button>
           </div>
         </form>
       )}
     </Modal>
+  );
+}
+
+/** 스케줄에서 폼의 날짜 칸에 넣을 기준일. */
+function startDateOf(schedule: Schedule): ISODate {
+  if (schedule.type === 'once') return schedule.date;
+  if (schedule.type === 'every') return schedule.anchor;
+  if (schedule.type === 'span') return schedule.start;
+  return monthlyToDate(schedule.day);
+}
+
+/** 매달 N일의 다음 발생일. */
+export function monthlyToDate(day: number): ISODate {
+  const today = fromISODate(todayISO());
+  const candidate = new Date(today.getFullYear(), today.getMonth(), day);
+  if (candidate < today) candidate.setMonth(candidate.getMonth() + 1);
+  return toISODate(candidate);
+}
+
+function RepeatChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      className={`chip ${active ? 'is-active' : ''}`}
+      aria-pressed={active}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   );
 }
 

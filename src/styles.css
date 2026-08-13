@@ -517,7 +517,7 @@ body {
 
 .list li {
   display: grid;
-  grid-template-columns: 46px 1fr auto;
+  grid-template-columns: minmax(46px, auto) 1fr auto;
   gap: 4px 8px;
   padding: 9px 0;
   border-bottom: 1px solid var(--line);
@@ -530,6 +530,8 @@ body {
 
 .list__date {
   color: var(--muted);
+  white-space: nowrap;
+  padding-right: 2px;
 }
 
 .list__amount {
@@ -715,54 +717,21 @@ button:focus-visible {
   color: var(--danger);
 }
 
-.kind-toggle {
-  display: flex;
-  flex: none;
-  padding: 2px;
-  background: var(--surface-2);
-  border-radius: 8px;
-}
 
-.kind-toggle__btn {
-  padding: 6px 10px;
-  border: 0;
-  border-radius: 6px;
-  background: transparent;
-  color: var(--muted);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
 
-.kind-toggle__btn.is-active {
-  background: var(--surface);
-  box-shadow: var(--shadow);
-}
 
-.kind-toggle__btn.is-active.is-expense {
-  color: var(--danger);
-}
 
-.kind-toggle__btn.is-active.is-income {
-  color: var(--ok);
-}
+
+
+
+
+
 
 /* --- 항목 폼 --- */
 
-.entry-row__day {
-  display: flex;
-  align-items: center;
-  gap: 3px;
-  color: var(--muted);
-  font-size: 13px;
-}
 
-.entry-row__day input {
-  width: 3.2em;
-  padding: 9px 4px;
-  text-align: center;
-}
+
+
 
 .entry-row__day {
   flex: none;
@@ -801,63 +770,25 @@ input[type='date'] {
 
 /* --- settings: 항목 목록 --- */
 
-.entry-list {
-  margin: 0 0 4px;
-  padding: 0;
-  list-style: none;
-}
 
-.entry-row {
-  padding: 10px 0;
-  border-bottom: 1px solid var(--line);
-}
 
-.entry-row__top {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
 
-.entry-row__name {
-  flex: 1;
-  min-width: 0;
-  padding: 9px 10px !important;
-  font-size: 14px;
-}
 
-.entry-row__bottom {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 5px;
-  margin-top: 6px;
-}
 
-.entry-row__amount {
-  flex: 1 1 40%;
-  min-width: 0;
-}
 
-.entry-row__bottom select {
-  flex: none;
-  padding: 9px 4px 9px 8px;
-  font-size: 13px;
-}
 
-.entry-row__bottom input[type='date'] {
-  flex: 1 1 55%;
-  font-size: 13px;
-}
 
-.entry-row__amount .money-input input {
-  padding: 9px 26px 9px 8px;
-  font-size: 14px;
-}
 
-.entry-row__amount .money-input__unit {
-  right: 8px;
-  font-size: 12px;
-}
+
+
+
+
+
+
+
+
+
+
 
 .entry-add {
   margin-top: 14px;
@@ -1242,4 +1173,158 @@ input[type='date'] {
 
 @media (max-width: 380px) {
 
+}
+
+/* --- 기간 예산(생활비) 막대 --- */
+
+.day__bars {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.allow {
+  position: relative;
+  height: 14px;
+  margin: 0 -3px; /* 셀 패딩을 상쇄해 옆 칸과 이어 붙인다 */
+  background: color-mix(in srgb, var(--danger) 16%, transparent);
+}
+
+.allow--income {
+  background: color-mix(in srgb, var(--ok) 18%, transparent);
+}
+
+.allow--start {
+  margin-left: 0;
+  border-top-left-radius: 7px;
+  border-bottom-left-radius: 7px;
+}
+
+.allow--end {
+  margin-right: 0;
+  border-top-right-radius: 7px;
+  border-bottom-right-radius: 7px;
+}
+
+.allow__label {
+  position: absolute;
+  top: 50%;
+  left: 4px;
+  z-index: 2;
+  transform: translateY(-50%);
+  color: var(--danger);
+  font-size: 9px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.allow--income .allow__label {
+  color: var(--ok);
+}
+
+/* --- 설정: 날짜별 카드 목록 --- */
+
+.entry-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.egroup__date {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ecard {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 11px 12px;
+  margin-bottom: 6px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.ecard:last-child {
+  margin-bottom: 0;
+}
+
+.ecard__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.ecard__dot.is-income {
+  background: var(--ok);
+}
+
+.ecard__dot.is-expense {
+  background: var(--danger);
+}
+
+.ecard__main {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  line-height: 1.3;
+}
+
+.ecard__main b {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ecard__main .muted {
+  font-size: 12px;
+}
+
+.ecard__amt {
+  flex: none;
+  font-size: 14px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+}
+
+.dialog-hint {
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ghost-btn--danger {
+  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
+  color: var(--danger);
+}
+
+.modal__delete {
+  margin-right: auto;
+}
+
+.dialog-items__name {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dialog-items__name:disabled {
+  cursor: default;
 }

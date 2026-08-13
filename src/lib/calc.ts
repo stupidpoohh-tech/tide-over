@@ -9,9 +9,13 @@ import {
   fromISODate,
   toISODate,
 } from './date';
-import { type Entry, type State, signedAmount } from './types';
+import type { Entry, State } from './types';
 
-export type Occurrence = { date: ISODate; entry: Entry };
+/**
+ * 예정 한 건의 하루 발생분. amount는 그 날 몫(양수)이다.
+ * once/monthly/every는 entry.amount 그대로, span(기간 예산)은 일할 몫이다.
+ */
+export type Occurrence = { date: ISODate; entry: Entry; amount: number };
 
 /**
  * (after, through] 구간에 잡히는 예정 입금·출금.
@@ -27,7 +31,19 @@ export function occurrences(entries: Entry[], after: ISODate, through: ISODate):
 
     if (s.type === 'once') {
       if (compareDate(s.date, after) > 0 && compareDate(s.date, through) <= 0) {
-        out.push({ date: s.date, entry });
+        out.push({ date: s.date, entry, amount: entry.amount });
+      }
+    } else if (s.type === 'span') {
+      // 기간 예산: 하루 몫으로 나눠 깔되, 나머지는 마지막 날에 몰아준다.
+      // 그래야 마지막 날이 지나는 순간 합이 정확히 총액이 된다.
+      const spanDays = diffDays(s.start, s.end) + 1;
+      const perDay = Math.floor(entry.amount / spanDays);
+      const firstCountable = addDays(after, 1);
+      const from = compareDate(s.start, firstCountable) > 0 ? s.start : firstCountable;
+      const to = compareDate(s.end, through) <= 0 ? s.end : through;
+      for (let d = from; compareDate(d, to) <= 0; d = addDays(d, 1)) {
+        const amount = d === s.end ? entry.amount - perDay * (spanDays - 1) : perDay;
+        out.push({ date: d, entry, amount });
       }
     } else if (s.type === 'every') {
       if (s.days < 1) continue; // 잘못된 데이터로 무한 루프를 돌지 않게
@@ -36,7 +52,7 @@ export function occurrences(entries: Entry[], after: ISODate, through: ISODate):
       const k = gap >= 0 ? Math.floor(gap / s.days) + 1 : 0;
       let date = addDays(s.anchor, k * s.days);
       while (compareDate(date, through) <= 0) {
-        out.push({ date, entry });
+        out.push({ date, entry, amount: entry.amount });
         date = addDays(date, s.days);
       }
     } else {
@@ -48,7 +64,7 @@ export function occurrences(entries: Entry[], after: ISODate, through: ISODate):
       while (cursor.year * 12 + cursor.month0 <= lastMonth) {
         const date = dayInMonth(cursor.year, cursor.month0, s.day);
         if (compareDate(date, after) > 0 && compareDate(date, through) <= 0) {
-          out.push({ date, entry });
+          out.push({ date, entry, amount: entry.amount });
         }
         cursor = addMonths(cursor.year, cursor.month0, 1);
       }
@@ -61,15 +77,42 @@ export function occurrences(entries: Entry[], after: ISODate, through: ISODate):
 
 /** 입금은 더하고 출금은 뺀 순액. */
 export function netOf(list: Occurrence[]): number {
-  return list.reduce((total, o) => total + signedAmount(o.entry), 0);
+  return list.reduce((t, o) => t + (o.entry.kind === 'income' ? o.amount : -o.amount), 0);
 }
 
 export function totalIn(list: Occurrence[]): number {
-  return list.reduce((t, o) => (o.entry.kind === 'income' ? t + o.entry.amount : t), 0);
+  return list.reduce((t, o) => (o.entry.kind === 'income' ? t + o.amount : t), 0);
 }
 
 export function totalOut(list: Occurrence[]): number {
-  return list.reduce((t, o) => (o.entry.kind === 'expense' ? t + o.entry.amount : t), 0);
+  return list.reduce((t, o) => (o.entry.kind === 'expense' ? t + o.amount : t), 0);
+}
+
+/**
+ * 목록 표시용 요약. 기간 예산의 하루 발생분들은 한 줄로 합친다 —
+ * 계산은 일할이지만 사용자에게 쪼갠 숫자를 보여주지 않는다는 약속.
+ */
+export type Summary = { key: string; entry: Entry; from: ISODate; to: ISODate; amount: number };
+
+export function summarize(list: Occurrence[]): Summary[] {
+  const out: Summary[] = [];
+  const spans = new Map<string, Summary>();
+  for (const o of list) {
+    if (o.entry.schedule.type === 'span') {
+      const g = spans.get(o.entry.id);
+      if (g) {
+        g.to = o.date;
+        g.amount += o.amount;
+      } else {
+        const item = { key: o.entry.id, entry: o.entry, from: o.date, to: o.date, amount: o.amount };
+        spans.set(o.entry.id, item);
+        out.push(item);
+      }
+    } else {
+      out.push({ key: `${o.date}-${o.entry.id}`, entry: o.entry, from: o.date, to: o.date, amount: o.amount });
+    }
+  }
+  return out;
 }
 
 /** (after, through] 구간의 순액. */
@@ -88,7 +131,9 @@ const SEARCH_DAYS = 400;
 const FALLBACK_DAYS = 30;
 
 export function horizonOf(entries: Entry[], today: ISODate): Horizon {
-  const incomes = entries.filter((e) => e.kind === 'income');
+  // 기간 예산은 "입금일"이 아니라 흐름이므로 주기 기준에서 뺀다 —
+  // 매일 조금씩 들어오는 걸 기준 삼으면 끝점이 늘 내일이 돼 버린다.
+  const incomes = entries.filter((e) => e.kind === 'income' && e.schedule.type !== 'span');
   const next = occurrences(incomes, today, addDays(today, SEARCH_DAYS))[0]?.date;
   if (next) return { end: addDays(next, -1), nextIncome: next };
   return { end: addDays(today, FALLBACK_DAYS), nextIncome: null };
