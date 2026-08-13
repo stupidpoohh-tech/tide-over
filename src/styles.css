@@ -7,6 +7,7 @@
   --line: #dfe4ea;
   --accent: #1f6feb;
   --accent-soft: #e8f0fe;
+  --band: #e9eefb;
   --danger: #c8342b;
   --danger-soft: #fdeceb;
   --warn-soft: #fff5e0;
@@ -27,6 +28,7 @@
     --line: #2a3849;
     --accent: #6ba4ff;
     --accent-soft: #1b3050;
+    --band: #1c2a3f;
     --danger: #ff8177;
     --danger-soft: #3a1f1e;
     --warn-soft: #352c14;
@@ -197,7 +199,20 @@ body {
 }
 
 .headline__amount {
+  display: block;
   margin: 2px 0 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font-family: inherit;
+  text-align: left;
+  cursor: pointer;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 6px;
+  text-decoration-color: var(--line);
   font-size: clamp(34px, 11vw, 46px);
   font-weight: 750;
   letter-spacing: -0.03em;
@@ -246,6 +261,20 @@ body {
   line-height: 1.6;
 }
 
+.editable {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-decoration: underline;
+  text-decoration-style: dotted;
+  text-underline-offset: 3px;
+  text-decoration-color: var(--line);
+  cursor: pointer;
+}
+
 .linkish {
   padding: 0;
   border: 0;
@@ -257,6 +286,132 @@ body {
 }
 
 /* --- calendar --- */
+
+.month-nav__today {
+  flex: none;
+  padding: 5px 10px;
+  font-size: 13px;
+}
+
+.weekday-row {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  column-gap: 0;
+  row-gap: 5px;
+  /* 가로로 미는 동작은 달 넘기기로 쓰므로 브라우저에 넘기지 않는다. */
+  touch-action: pan-y;
+}
+
+.day {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 2px;
+  min-height: 56px;
+  padding: 4px 3px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.day--blank {
+  cursor: default;
+}
+
+.day__num {
+  align-self: flex-start;
+  padding: 1px 4px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 오늘은 구간 색과 싸우지 않게 날짜 숫자만 강조한다. */
+.day--today .day__num {
+  background: var(--accent);
+  color: #fff;
+}
+
+.day__item {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+  overflow: hidden;
+}
+
+.day__item-name {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.day__item-amt {
+  color: var(--danger);
+  font-size: 10px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.day__item.is-income .day__item-amt {
+  color: var(--ok);
+}
+
+.day__limit {
+  margin-top: auto;
+  padding-top: 2px;
+  color: var(--muted);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.day__limit.is-negative {
+  color: var(--danger);
+  font-weight: 700;
+}
+
+.day--past {
+  opacity: 0.45;
+}
+
+/* 오늘부터 다음 입금 전날까지를 끊기지 않는 띠로 보여준다. */
+.day--band {
+  background: var(--band);
+}
+
+.day--band-start {
+  border-top-left-radius: 10px;
+  border-bottom-left-radius: 10px;
+}
+
+.day--band-end {
+  border-top-right-radius: 10px;
+  border-bottom-right-radius: 10px;
+}
+
+.day.is-selected {
+  box-shadow: inset 0 0 0 2px var(--text);
+  border-radius: 10px;
+}
+
+.legend {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
 
 .month-nav {
   display: flex;
@@ -272,19 +427,9 @@ body {
   font-size: 15px;
 }
 
-.month-nav__today {
-  position: absolute;
-  right: 18px;
-  padding: 4px 10px;
-  font-size: 13px;
-}
 
-.weekday-row,
-.grid {
-  display: grid;
-  grid-template-columns: repeat(7, 1fr);
-  gap: 3px;
-}
+
+
 
 .weekday-row {
   margin-bottom: 4px;
@@ -297,103 +442,35 @@ body {
   color: var(--danger);
 }
 
-.day {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
-  min-height: 58px;
-  padding: 4px 5px;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  background: var(--surface-2);
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
 
-.day--blank {
-  background: transparent;
-  cursor: default;
-}
 
-.day__num {
-  font-size: 12px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
 
-.day__net {
-  color: var(--danger);
-  font-size: 10px;
-  font-variant-numeric: tabular-nums;
-}
 
-.day__net.is-income {
-  color: var(--ok);
-}
 
-.day__limit {
-  margin-top: auto;
-  color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
-}
 
-.day__limit.is-negative {
-  color: var(--danger);
-  font-weight: 700;
-}
 
-.day--past {
-  background: transparent;
-  color: var(--muted);
-  opacity: 0.5;
-}
 
-.day--today {
-  border-color: var(--accent);
-  background: var(--accent-soft);
-}
 
-.day--cycle-end {
-  outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-  outline-offset: -2px;
-}
 
-.day.is-selected {
-  border-color: var(--text);
-}
 
-.legend {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px 12px;
-  margin: 10px 0 0;
-  color: var(--muted);
-  font-size: 12px;
-}
 
-.legend__item::before {
-  content: '';
-  display: inline-block;
-  width: 9px;
-  height: 9px;
-  margin-right: 4px;
-  border-radius: 3px;
-  vertical-align: -1px;
-}
 
-.legend__item--today::before {
-  background: var(--accent-soft);
-  border: 1px solid var(--accent);
-}
 
-.legend__item--end::before {
-  border: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 .ghost-btn--block {
   display: block;
@@ -427,10 +504,7 @@ body {
 }
 
 /* 안내 문구는 범례와 같은 줄에 끼우지 않고 항상 아래 줄에 둔다 — 잘리지 않게. */
-.legend__hint {
-  width: 100%;
-  margin-top: 2px;
-}
+
 
 /* --- lists --- */
 

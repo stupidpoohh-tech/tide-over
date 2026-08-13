@@ -3,15 +3,13 @@ import { CalendarScreen } from './components/CalendarScreen';
 import { Onboarding } from './components/Onboarding';
 import { RestoreDialog } from './components/RestoreDialog';
 import { SettingsScreen } from './components/SettingsScreen';
-import { SettleScreen } from './components/SettleScreen';
 import { todayISO } from './lib/date';
 import { useStore } from './store';
 
-type Tab = 'calendar' | 'settle' | 'settings';
+type Tab = 'calendar' | 'settings';
 
 const TABS: Array<{ id: Tab; label: string }> = [
   { id: 'calendar', label: '달력' },
-  { id: 'settle', label: '정산' },
   { id: 'settings', label: '설정' },
 ];
 
@@ -66,19 +64,7 @@ export default function App() {
             onRestoreLink={store.offerRestore}
           />
         ) : tab === 'calendar' ? (
-          <CalendarScreen
-            state={state}
-            today={today}
-            onSave={store.setState}
-            onGoSettle={() => setTab('settle')}
-          />
-        ) : tab === 'settle' ? (
-          <SettleScreen
-            state={state}
-            wasWiped={store.wasWiped}
-            onRestoreLink={store.offerRestore}
-            onSave={store.setState}
-          />
+          <CalendarScreen state={state} today={today} onSave={store.setState} />
         ) : (
           <SettingsScreen
             state={state}
