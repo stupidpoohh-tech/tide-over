@@ -192,6 +192,28 @@ body {
 
 /* --- headline --- */
 
+.headline__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.add-btn {
+  flex: none;
+  width: 34px;
+  height: 34px;
+  margin-top: -4px;
+  border: 0;
+  border-radius: 10px;
+  background: var(--accent);
+  color: #fff;
+  font: inherit;
+  font-size: 20px;
+  line-height: 1;
+  cursor: pointer;
+}
+
 .headline__label {
   margin: 0;
   color: var(--muted);

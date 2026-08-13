@@ -98,11 +98,22 @@ export function CalendarScreen({ state, today, onSave }: Props) {
   return (
     <div className="screen">
       <section className="headline card">
-        <p className="headline__label">
-          {horizon.nextIncome
-            ? `다음 입금(${formatShortDate(horizon.nextIncome)}) 전날까지`
-            : '앞으로 30일'}
-        </p>
+        <div className="headline__top">
+          <p className="headline__label">
+            {horizon.nextIncome
+              ? `다음 입금(${formatShortDate(horizon.nextIncome)}) 전날까지`
+              : '앞으로 30일'}
+          </p>
+          {/* 달력에서 날짜를 고르지 않고도 바로 만들 수 있는 입구. */}
+          <button
+            type="button"
+            className="add-btn"
+            aria-label="예정 추가"
+            onClick={() => setAddingOn(selected ?? addDays(today, 1))}
+          >
+            +
+          </button>
+        </div>
         <button
           type="button"
           className={`headline__amount ${headline < 0 ? 'is-negative' : ''}`}
