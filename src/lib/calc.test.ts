@@ -300,6 +300,43 @@ describe('limitOn', () => {
   });
 });
 
+describe('limitOn — 기간 예산은 전액 예약으로 보인다', () => {
+  const s = state({
+    balance: { amount: 500_000, checkedAt: '2026-03-04T09:00:00+09:00' },
+    entries: [span('a', '생활비', 100_000, '2026-03-05', '2026-03-15'), inc('b', '급여', 0, 25)],
+  });
+
+  it('기간 시작 전 날짜의 한도에는 잡히지 않는다', () => {
+    expect(limitOn(s, '2026-03-04', '2026-03-04')).toBe(500_000);
+  });
+
+  it('기간에 들어서면 남은 몫 전체가 한 번에 빠지고, 기간 내내 상수다', () => {
+    // 매일 9,090원씩 줄어드는 숫자가 보이면 안 된다 — 사용자 요구사항.
+    const values = ['2026-03-05', '2026-03-08', '2026-03-12', '2026-03-15', '2026-03-20'].map(
+      (d) => limitOn(s, d, '2026-03-04'),
+    );
+    expect(new Set(values).size).toBe(1);
+    expect(values[0]).toBe(400_000);
+  });
+
+  it('기간 중간 시점에서는 이미 지난 몫을 빼고 남은 몫만 예약한다', () => {
+    // 3/10 기준 남은 몫 = (3/10, 3/15] = 9,090×4 + 9,100 = 45,460
+    const mid = limitOn(s, '2026-03-12', '2026-03-10');
+    expect(mid).toBe(500_000 - 45_460);
+    expect(limitOn(s, '2026-03-15', '2026-03-10')).toBe(mid);
+    expect(limitOn(s, '2026-03-20', '2026-03-10')).toBe(mid);
+  });
+
+  it('기간이 주기 끝을 넘어가도 머리 숫자는 남은 몫 전체를 예약한다', () => {
+    const crossing = state({
+      balance: { amount: 500_000, checkedAt: '2026-03-18T09:00:00+09:00' },
+      entries: [span('a', '생활비', 100_000, '2026-03-20', '2026-04-10'), inc('b', '급여', 0, 25)],
+    });
+    // 주기 끝은 3/24지만, 3/20에 시작하는 생활비는 전액이 묶인 돈이다.
+    expect(headlineLimit(crossing, '2026-03-18')).toBe(400_000);
+  });
+});
+
 describe('upcomingInHorizon', () => {
   it('오늘 이후 ~ 다음 입금 전날까지만 담는다', () => {
     const s = state({
@@ -307,6 +344,18 @@ describe('upcomingInHorizon', () => {
     });
     // 끝점 3/24 → 3/28 보험은 다음 주기다.
     expect(upcomingInHorizon(s, '2026-03-07').map((o) => o.date)).toEqual(['2026-03-10']);
+  });
+
+  it('기간 예산은 주기 끝에 걸치기만 하면 남은 몫 전체가 담긴다', () => {
+    const s = state({
+      entries: [span('a', '생활비', 100_000, '2026-03-20', '2026-04-10'), inc('b', '급여', 0, 25)],
+    });
+    const total = upcomingInHorizon(s, '2026-03-18').reduce(
+      (t, o) => t + (o.entry.kind === 'income' ? o.amount : -o.amount),
+      0,
+    );
+    // 머리 숫자와 같은 규칙 — 내역 합이 headlineLimit의 차감분과 일치한다.
+    expect(total).toBe(-100_000);
   });
 });
 

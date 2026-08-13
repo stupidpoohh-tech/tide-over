@@ -144,9 +144,28 @@ export function horizonOf(entries: Entry[], today: ISODate): Horizon {
  *
  * "예상 잔고"가 아니라 "이 날까지 쓸 수 있는 한도"다.
  * 오늘 이전은 잔고가 이미 말해주므로 계산에 들어가지 않는다.
+ *
+ * 기간 예산(생활비)만 규칙이 다르다: d가 기간에 들어서는 순간
+ * **남은 몫 전체**를 예약한다. 일할로 깎으면 기간 안의 날들이 매일
+ * 줄어드는 숫자로 보이는데, 그 돈은 어차피 기간 동안 생활비로 묶인
+ * 돈이라 다른 지출의 한도에서는 처음부터 통째로 빼는 게 맞다.
+ * 기간 안에서는 상수이고, 마지막 날이 지나도 같은 값이다.
+ * (정산은 여전히 일할 페이스가 기준이라, 페이스대로 정산하면
+ * 이 한도가 흔들리지 않는다.)
  */
 export function limitOn(state: State, date: ISODate, today: ISODate): number {
-  return state.balance.amount + netBetween(state.entries, today, date);
+  let total = state.balance.amount;
+  for (const entry of state.entries) {
+    const s = entry.schedule;
+    if (s.type === 'span') {
+      if (compareDate(s.start, date) <= 0) {
+        total += netBetween([entry], today, s.end);
+      }
+    } else {
+      total += netBetween([entry], today, date);
+    }
+  }
+  return total;
 }
 
 /** 머리 숫자 — 다음 입금 전날(또는 30일 뒤)까지 남는 한도. */
@@ -187,9 +206,26 @@ export function settle(state: State, newAmount: number, now: Date = new Date()):
   };
 }
 
-/** 오늘 이후 ~ 머리 숫자 끝점까지 남은 예정. */
+/**
+ * 오늘 이후 ~ 머리 숫자 끝점까지 남은 예정.
+ * 기간 예산은 끝점에 걸치기만 하면 남은 몫 전체가 담긴다 —
+ * 머리 숫자(limitOn)와 같은 규칙이어야 내역 합과 머리 숫자가 맞는다.
+ */
 export function upcomingInHorizon(state: State, today: ISODate): Occurrence[] {
-  return occurrences(state.entries, today, horizonOf(state.entries, today).end);
+  const h = horizonOf(state.entries, today);
+  const out: Occurrence[] = [];
+  for (const entry of state.entries) {
+    const s = entry.schedule;
+    if (s.type === 'span') {
+      if (compareDate(s.start, h.end) <= 0) {
+        out.push(...occurrences([entry], today, s.end));
+      }
+    } else {
+      out.push(...occurrences([entry], today, h.end));
+    }
+  }
+  out.sort((a, b) => compareDate(a.date, b.date) || a.entry.name.localeCompare(b.entry.name));
+  return out;
 }
 
 /** 하루치 (전날, 그날] 구간의 예정. */
