@@ -406,32 +406,6 @@ body {
   background: var(--ok);
 }
 
-.day-detail {
-  margin-top: 14px;
-  padding: 12px 14px;
-  background: var(--surface-2);
-  border-radius: 10px;
-}
-
-.day-detail__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-
-.day-detail h3 {
-  margin: 0;
-  font-size: 14px;
-}
-
-.day-detail .entry-form {
-  margin-top: 10px;
-  padding-top: 12px;
-  border-top: 1px dashed var(--line);
-}
-
 .ghost-btn--block {
   display: block;
   width: 100%;
@@ -467,12 +441,6 @@ body {
 .legend__hint {
   width: 100%;
   margin-top: 2px;
-}
-
-.day-detail__limit {
-  margin: 0 0 8px;
-  font-size: 14px;
-  font-variant-numeric: tabular-nums;
 }
 
 /* --- lists --- */
@@ -719,40 +687,6 @@ button:focus-visible {
 
 /* --- 항목 폼 --- */
 
-.entry-form {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.entry-form__main {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 6px;
-}
-
-.entry-form__main input[type='text'] {
-  padding: 9px 10px;
-  font-size: 14px;
-}
-
-.entry-form__main .money-input input {
-  padding: 9px 26px 9px 8px;
-  font-size: 14px;
-}
-
-.entry-form__main .money-input__unit {
-  right: 8px;
-  font-size: 12px;
-}
-
-.entry-form__schedule {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.entry-form__day,
 .entry-row__day {
   display: flex;
   align-items: center;
@@ -761,7 +695,6 @@ button:focus-visible {
   font-size: 13px;
 }
 
-.entry-form__day input,
 .entry-row__day input {
   width: 3.2em;
   padding: 9px 4px;
@@ -770,16 +703,6 @@ button:focus-visible {
 
 .entry-row__day {
   flex: none;
-}
-
-.entry-form__actions {
-  display: flex;
-  gap: 8px;
-}
-
-.entry-form__actions .primary-btn {
-  flex: 1;
-  padding: 9px 14px;
 }
 
 select,
@@ -875,8 +798,6 @@ input[type='date'] {
 
 .entry-add {
   margin-top: 14px;
-  padding-top: 14px;
-  border-top: 1px dashed var(--line);
 }
 
 .total-line {
@@ -1014,9 +935,166 @@ input[type='date'] {
   box-shadow: 0 20px 50px rgb(0 0 0 / 35%);
 }
 
-.modal h2 {
+.modal__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.modal__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin: 0 0 6px;
   font-size: 17px;
+  letter-spacing: -0.01em;
+}
+
+.modal__head .modal__title {
+  margin: 0;
+}
+
+.modal__badge {
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 12px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.modal__note {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: var(--surface-2);
+  border-radius: 10px;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+}
+
+.modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+/* --- 대화상자 폼 (라벨 열 + 입력) --- */
+
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.dialog-row {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.dialog-row__label {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.dialog-row .money-input input {
+  font-size: 16px;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.chip.is-active {
+  background: var(--text);
+  border-color: var(--text);
+  color: var(--surface);
+}
+
+.chip__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.chip--income .chip__dot {
+  background: var(--ok);
+}
+
+.chip--expense .chip__dot {
+  background: var(--danger);
+}
+
+.dialog-items {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  list-style: none;
+  background: var(--surface-2);
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.dialog-items li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 3px 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.dialog-items__right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dialog-warn {
+  margin: 0;
+  padding: 9px 12px;
+  border-radius: 9px;
+  background: var(--warn-soft);
+  border: 1px solid var(--warn-line);
+  font-size: 13px;
+}
+
+.solid-btn {
+  padding: 11px 20px;
+  border: 1px solid var(--text);
+  border-radius: 10px;
+  background: var(--text);
+  color: var(--surface);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.solid-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .compare {
@@ -1086,8 +1164,5 @@ input[type='date'] {
 }
 
 @media (max-width: 380px) {
-  .entry-form__main {
-    grid-template-columns: 1fr;
-  }
 
 }

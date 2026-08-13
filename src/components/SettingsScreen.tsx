@@ -5,7 +5,8 @@ import { formatInstant, fromISODate, todayISO } from '../lib/date';
 import { copyText } from '../lib/clipboard';
 import type { PersistenceStatus } from '../lib/storage';
 import { type Entry, type State, signedAmount } from '../lib/types';
-import { EntryForm, KindToggle } from './EntryForm';
+import { EntryDialog } from './EntryDialog';
+import { KindToggle } from './KindToggle';
 import { MoneyInput } from './MoneyInput';
 import { RestoreField, extractPayload } from './WipedNotice';
 
@@ -35,6 +36,7 @@ export function SettingsScreen({
   const [link, setLink] = useState<string | null>(null);
   const [restoreInput, setRestoreInput] = useState('');
   const [confirmingReset, setConfirmingReset] = useState(false);
+  const [adding, setAdding] = useState(false);
 
   function update(patch: Partial<State>) {
     onSave({ ...state, ...patch });
@@ -105,9 +107,13 @@ export function SettingsScreen({
           </ul>
         )}
 
-        <div className="entry-add">
-          <EntryForm onAdd={(entry) => update({ entries: [...state.entries, entry] })} />
-        </div>
+        <button
+          type="button"
+          className="ghost-btn ghost-btn--block entry-add"
+          onClick={() => setAdding(true)}
+        >
+          + 예정 추가
+        </button>
 
         <p className="total-line">
           <span>매달 반복분 합계</span>
@@ -207,6 +213,15 @@ export function SettingsScreen({
           </button>
         )}
       </section>
+
+      {adding && (
+        <EntryDialog
+          today={todayISO()}
+          onAdd={(entry) => update({ entries: [...state.entries, entry] })}
+          onRemove={(id) => update({ entries: state.entries.filter((e) => e.id !== id) })}
+          onClose={() => setAdding(false)}
+        />
+      )}
     </div>
   );
 }

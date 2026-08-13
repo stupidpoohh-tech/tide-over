@@ -25,7 +25,7 @@ import {
   toISODate,
 } from '../lib/date';
 import type { Entry, State } from '../lib/types';
-import { EntryForm } from './EntryForm';
+import { EntryDialog } from './EntryDialog';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
@@ -197,18 +197,9 @@ export function CalendarScreen({ state, today, onSave, onGoSettle }: Props) {
           <span className="legend__item legend__item--today">오늘</span>
           <span className="legend__item legend__item--end">주기 마지막 날</span>
           <span className="legend__item legend__item--payday">급여일</span>
-          <span className="legend__hint">날짜를 누르면 그 날의 예정을 넣을 수 있습니다</span>
+          <span className="legend__hint">날짜를 누르면 그 날의 예정을 넣을 수 있습니다.</span>
         </p>
 
-        {selectedCell && (
-          <DayDetail
-            cell={selectedCell}
-            today={today}
-            onAdd={addEntry}
-            onRemove={removeEntry}
-            onClose={() => setSelected(null)}
-          />
-        )}
       </section>
 
       <section className="card">
@@ -235,95 +226,21 @@ export function CalendarScreen({ state, today, onSave, onGoSettle }: Props) {
           </ul>
         )}
       </section>
-    </div>
-  );
-}
 
-function DayDetail({
-  cell,
-  today,
-  onAdd,
-  onRemove,
-  onClose,
-}: {
-  cell: Cell;
-  today: ISODate;
-  onAdd: (entry: Entry) => void;
-  onRemove: (id: string) => void;
-  onClose: () => void;
-}) {
-  const [adding, setAdding] = useState(false);
-  /**
-   * 예정은 오늘 이후에만 존재한다. 오늘까지는 잔고가 이미 말해주고 있어서,
-   * 오늘 날짜에 예정을 넣으면 잔고와 이중으로 세어진다.
-   */
-  const canAdd = compareDate(cell.date, today) > 0;
-
-  return (
-    <div className="day-detail">
-      <header className="day-detail__head">
-        <h3>{formatDate(cell.date)}</h3>
-        <button type="button" className="icon-btn" aria-label="닫기" onClick={onClose}>
-          ×
-        </button>
-      </header>
-
-      {!cell.isPast && (
-        <p className="day-detail__limit">
-          이 날까지 쓸 수 있는 한도 <b>{formatWon(cell.limit)}</b>
-        </p>
-      )}
-
-      {cell.items.length > 0 ? (
-        <ul className="mini-list">
-          {cell.items.map((o) => (
-            <li key={o.entry.id}>
-              <span>
-                {o.entry.name}
-                {o.entry.schedule.type === 'monthly' && <em className="tag">매달</em>}
-              </span>
-              <span className="mini-list__right">
-                <span className={o.entry.kind === 'income' ? 'is-income' : 'is-expense'}>
-                  {o.entry.kind === 'income' ? '+' : '−'}
-                  {formatWon(o.entry.amount)}
-                </span>
-                {canAdd && (
-                  <button
-                    type="button"
-                    className="icon-btn icon-btn--small icon-btn--danger"
-                    aria-label={`${o.entry.name} 삭제`}
-                    onClick={() => onRemove(o.entry.id)}
-                  >
-                    ×
-                  </button>
-                )}
-              </span>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <p className="muted">이 날 예정된 입금·출금이 없습니다.</p>
-      )}
-
-      {cell.isPast ? (
-        <p className="muted">오늘 이전입니다. 지난 일은 달력이 아니라 통장 잔고가 말해줍니다.</p>
-      ) : !canAdd ? (
-        <p className="muted">
-          오늘까지는 통장 잔고가 말해줍니다. 예정은 내일 날짜부터 넣을 수 있습니다.
-        </p>
-      ) : adding ? (
-        <EntryForm
-          fixedDate={cell.date}
-          onAdd={(entry) => {
-            onAdd(entry);
-            setAdding(false);
+      {selectedCell && (
+        <EntryDialog
+          day={{
+            date: selectedCell.date,
+            limit: selectedCell.limit,
+            items: selectedCell.items,
+            isPast: selectedCell.isPast,
+            isToday: selectedCell.isToday,
           }}
-          onCancel={() => setAdding(false)}
+          today={today}
+          onAdd={addEntry}
+          onRemove={removeEntry}
+          onClose={() => setSelected(null)}
         />
-      ) : (
-        <button type="button" className="ghost-btn ghost-btn--block" onClick={() => setAdding(true)}>
-          + 이 날에 입금·출금 추가
-        </button>
       )}
     </div>
   );
