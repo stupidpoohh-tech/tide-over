@@ -4,7 +4,7 @@ import { formatWon } from '../lib/calc';
 import { formatInstant, fromISODate, todayISO } from '../lib/date';
 import { copyText } from '../lib/clipboard';
 import type { PersistenceStatus } from '../lib/storage';
-import { type Entry, type State, signedAmount } from '../lib/types';
+import { type Entry, type Schedule, type State, signedAmount } from '../lib/types';
 import { EntryDialog } from './EntryDialog';
 import { KindToggle } from './KindToggle';
 import { MoneyInput } from './MoneyInput';
@@ -65,33 +65,10 @@ export function SettingsScreen({
   return (
     <div className="screen">
       <section className="card">
-        <h2 className="card__title">급여일</h2>
-        <label className="field field--inline">
-          <span className="field__label">매달</span>
-          <input
-            type="number"
-            min={1}
-            max={31}
-            inputMode="numeric"
-            value={state.payday}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              if (Number.isInteger(n) && n >= 1 && n <= 31) update({ payday: n });
-            }}
-          />
-          <span className="field__suffix">일</span>
-        </label>
-        <p className="muted">
-          주기는 급여일부터 다음 급여 전날까지입니다. 급여일이 그 달 말일보다 크면 말일로
-          당겨집니다.
-        </p>
-      </section>
-
-      <section className="card">
         <h2 className="card__title">예정 수입·지출</h2>
         <p className="muted">
-          매달 반복되는 것과 특정 일자에 한 번 있는 것 모두 넣을 수 있습니다. 아직 오지 않은
-          것만 넣으세요 — 이미 지나간 변동 지출은 잔고가 말해줍니다.
+          급여도 여기서 예정 입금으로 관리합니다 — 머리 숫자는 다음 예정 입금 전날까지로
+          계산됩니다. 반복은 한 번 / 매달 며칠 / N일마다(1주=7) 중에 고릅니다.
         </p>
 
         {state.entries.length > 0 && (
@@ -235,6 +212,24 @@ function EntryRow({
   onChange: (patch: Partial<Entry>) => void;
   onRemove: () => void;
 }) {
+  /** 반복 방식을 바꿀 때 기존 정보에서 최대한 자연스러운 기본값을 만든다. */
+  function changeType(t: Schedule['type']) {
+    const s = entry.schedule;
+    if (t === s.type) return;
+    if (t === 'monthly') {
+      const base = s.type === 'once' ? s.date : s.type === 'every' ? s.anchor : null;
+      if (base === null) return;
+      onChange({ schedule: { type: 'monthly', day: fromISODate(base).getDate() } });
+    } else if (t === 'once') {
+      const date =
+        s.type === 'monthly' ? monthlyToDate(s.day) : s.type === 'every' ? s.anchor : s.date;
+      onChange({ schedule: { type: 'once', date } });
+    } else {
+      const anchor = s.type === 'once' ? s.date : monthlyToDate(s.type === 'monthly' ? s.day : 1);
+      onChange({ schedule: { type: 'every', days: 7, anchor } });
+    }
+  }
+
   return (
     <li className="entry-row">
       <div className="entry-row__top">
@@ -265,29 +260,11 @@ function EntryRow({
         <select
           value={entry.schedule.type}
           aria-label="반복"
-          onChange={(e) =>
-            onChange({
-              schedule:
-                e.target.value === 'monthly'
-                  ? {
-                      type: 'monthly',
-                      day:
-                        entry.schedule.type === 'once'
-                          ? fromISODate(entry.schedule.date).getDate()
-                          : entry.schedule.day,
-                    }
-                  : {
-                      type: 'once',
-                      date:
-                        entry.schedule.type === 'monthly'
-                          ? monthlyToDate(entry.schedule.day)
-                          : entry.schedule.date,
-                    },
-            })
-          }
+          onChange={(e) => changeType(e.target.value as Schedule['type'])}
         >
-          <option value="monthly">매달</option>
           <option value="once">특정 일자</option>
+          <option value="monthly">매달</option>
+          <option value="every">N일마다</option>
         </select>
 
         {entry.schedule.type === 'monthly' ? (
@@ -308,7 +285,7 @@ function EntryRow({
             />
             <span>일</span>
           </span>
-        ) : (
+        ) : entry.schedule.type === 'once' ? (
           <input
             type="date"
             value={entry.schedule.date}
@@ -317,6 +294,36 @@ function EntryRow({
               if (e.target.value) onChange({ schedule: { type: 'once', date: e.target.value } });
             }}
           />
+        ) : (
+          <>
+            <span className="entry-row__day">
+              <input
+                type="number"
+                min={1}
+                max={365}
+                inputMode="numeric"
+                value={entry.schedule.days}
+                aria-label="반복 주기"
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isInteger(n) && n >= 1 && n <= 365 && entry.schedule.type === 'every') {
+                    onChange({ schedule: { ...entry.schedule, days: n } });
+                  }
+                }}
+              />
+              <span>일마다</span>
+            </span>
+            <input
+              type="date"
+              value={entry.schedule.anchor}
+              aria-label="시작일"
+              onChange={(e) => {
+                if (e.target.value && entry.schedule.type === 'every') {
+                  onChange({ schedule: { ...entry.schedule, anchor: e.target.value } });
+                }
+              }}
+            />
+          </>
         )}
       </div>
     </li>

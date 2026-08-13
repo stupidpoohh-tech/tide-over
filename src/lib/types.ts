@@ -3,11 +3,15 @@ import type { ISODate } from './date';
 export type EntryKind = 'income' | 'expense';
 
 /**
- * 반복 규칙. 두 가지뿐이다.
+ * 반복 규칙. 세 가지뿐이다.
+ * - once:    특정 일자 한 번.
  * - monthly: 매달 며칠. 그 달에 없는 날짜면 말일로 당겨진다.
- * - once: 특정 일자 한 번.
+ * - every:   anchor부터 N일마다. 1주는 7, 열흘은 10.
  */
-export type Schedule = { type: 'monthly'; day: number } | { type: 'once'; date: ISODate };
+export type Schedule =
+  | { type: 'once'; date: ISODate }
+  | { type: 'monthly'; day: number }
+  | { type: 'every'; days: number; anchor: ISODate };
 
 /** 예정된 입금 또는 출금 한 건. */
 export type Entry = {
@@ -25,9 +29,11 @@ export type Balance = {
   checkedAt: string;
 };
 
+/**
+ * 급여일 필드는 없다. 급여도 그냥 예정 입금이고,
+ * 주기는 "다음 예정 입금 전날까지"로 계산된다.
+ */
 export type State = {
-  /** 급여일 (1–31). 말일보다 크면 말일로 당겨진다. */
-  payday: number;
   balance: Balance;
   entries: Entry[];
 };
@@ -37,11 +43,10 @@ export function signedAmount(entry: Entry): number {
   return entry.kind === 'income' ? entry.amount : -entry.amount;
 }
 
-export function makeInitialState(payday: number, amount: number, now = new Date()): State {
+export function makeInitialState(amount: number, entries: Entry[] = [], now = new Date()): State {
   return {
-    payday,
     balance: { amount, checkedAt: now.toISOString() },
-    entries: [],
+    entries,
   };
 }
 
@@ -49,8 +54,6 @@ export function makeInitialState(payday: number, amount: number, now = new Date(
 export function isState(value: unknown): value is State {
   if (typeof value !== 'object' || value === null) return false;
   const s = value as Record<string, unknown>;
-
-  if (!isDay(s.payday)) return false;
 
   const balance = s.balance as Record<string, unknown> | undefined;
   if (typeof balance !== 'object' || balance === null) return false;
@@ -81,8 +84,21 @@ function isSchedule(value: unknown): value is Schedule {
   if (typeof value !== 'object' || value === null) return false;
   const s = value as Record<string, unknown>;
   if (s.type === 'monthly') return isDay(s.day);
-  if (s.type === 'once') return typeof s.date === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(s.date);
+  if (s.type === 'once') return isISODate(s.date);
+  if (s.type === 'every') {
+    return (
+      typeof s.days === 'number' &&
+      Number.isInteger(s.days) &&
+      s.days >= 1 &&
+      s.days <= 365 &&
+      isISODate(s.anchor)
+    );
+  }
   return false;
+}
+
+function isISODate(value: unknown): value is string {
+  return typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value);
 }
 
 function isDay(value: unknown): value is number {
@@ -97,5 +113,7 @@ export function newId(): string {
 }
 
 export function describeSchedule(schedule: Schedule): string {
-  return schedule.type === 'monthly' ? `매달 ${schedule.day}일` : schedule.date;
+  if (schedule.type === 'monthly') return `매달 ${schedule.day}일`;
+  if (schedule.type === 'every') return `${schedule.days}일마다`;
+  return schedule.date;
 }

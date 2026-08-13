@@ -362,13 +362,6 @@ body {
   outline-offset: -2px;
 }
 
-.day--payday .day__num::after {
-  content: '·';
-  margin-left: 2px;
-  color: var(--ok);
-  font-weight: 900;
-}
-
 .day.is-selected {
   border-color: var(--text);
 }
@@ -400,10 +393,6 @@ body {
 
 .legend__item--end::before {
   border: 2px solid color-mix(in srgb, var(--accent) 45%, transparent);
-}
-
-.legend__item--payday::before {
-  background: var(--ok);
 }
 
 .ghost-btn--block {
@@ -1070,6 +1059,20 @@ input[type='date'] {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.every-edit {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.every-edit input {
+  width: 3.6em;
+  padding: 9px 4px;
+  text-align: center;
 }
 
 .dialog-warn {

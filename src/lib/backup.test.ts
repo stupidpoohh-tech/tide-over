@@ -9,7 +9,6 @@ import {
 import type { State } from './types';
 
 const sample: State = {
-  payday: 25,
   balance: { amount: 1_900_000, checkedAt: '2026-03-07T09:00:00.000Z' },
   entries: [
     { id: 'a', name: '월세', amount: 600_000, kind: 'expense', schedule: { type: 'monthly', day: 10 } },
@@ -26,6 +25,13 @@ const sample: State = {
       amount: 100_000,
       kind: 'income',
       schedule: { type: 'once', date: '2026-04-02' },
+    },
+    {
+      id: 'd',
+      name: '주급',
+      amount: 200_000,
+      kind: 'income',
+      schedule: { type: 'every', days: 7, anchor: '2026-03-10' },
     },
   ],
 };
@@ -80,17 +86,20 @@ describe('encode/decode', () => {
     const result = decodeBackup(v1);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.state.entries).toEqual([
-      {
-        id: 'a',
-        name: '월세',
-        amount: 600_000,
-        kind: 'expense',
-        schedule: { type: 'monthly', day: 10 },
-      },
-    ]);
+    expect(result.state.entries[0]).toEqual({
+      id: 'a',
+      name: '월세',
+      amount: 600_000,
+      kind: 'expense',
+      schedule: { type: 'monthly', day: 10 },
+    });
+    // v1의 급여일은 0원 급여 입금으로 살아난다 — 주기 기준이 유지된다.
+    expect(result.state.entries[1]).toMatchObject({
+      name: '급여',
+      kind: 'income',
+      schedule: { type: 'monthly', day: 25 },
+    });
     expect(result.state.balance.amount).toBe(1_900_000);
-    expect(result.state.payday).toBe(25);
   });
 
   it('더 최신 스키마 버전의 백업을 거부한다', () => {

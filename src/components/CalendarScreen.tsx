@@ -1,16 +1,16 @@
 import { useMemo, useState } from 'react';
 import {
+  type Horizon,
   type Occurrence,
-  cycleOf,
   entriesOn,
   formatWon,
   headlineLimit,
+  horizonOf,
   limitOn,
   netOf,
-  nextPayday,
   totalIn,
   totalOut,
-  upcomingInCycle,
+  upcomingInHorizon,
 } from '../lib/calc';
 import {
   type ISODate,
@@ -18,10 +18,10 @@ import {
   compareDate,
   dateOfInstant,
   daysInMonth,
+  diffDays,
   formatDate,
   formatShortDate,
   fromISODate,
-  diffDays,
   toISODate,
 } from '../lib/date';
 import type { Entry, State } from '../lib/types';
@@ -44,17 +44,16 @@ export function CalendarScreen({ state, today, onSave, onGoSettle }: Props) {
   }));
   const [selected, setSelected] = useState<ISODate | null>(null);
 
-  const cycle = useMemo(() => cycleOf(state.payday, today), [state.payday, today]);
-  const payday = nextPayday(cycle);
+  const horizon = useMemo(() => horizonOf(state.entries, today), [state.entries, today]);
   const headline = useMemo(() => headlineLimit(state, today), [state, today]);
-  const upcoming = useMemo(() => upcomingInCycle(state, today), [state, today]);
+  const upcoming = useMemo(() => upcomingInHorizon(state, today), [state, today]);
   const upcomingIn = totalIn(upcoming);
   const upcomingOut = totalOut(upcoming);
-  const daysLeft = diffDays(today, cycle.end);
+  const daysLeft = diffDays(today, horizon.end);
 
   const cells = useMemo(
-    () => buildMonth(state, month.year, month.month0, today),
-    [state, month, today],
+    () => buildMonth(state, month.year, month.month0, today, horizon),
+    [state, month, today, horizon],
   );
 
   const viewingThisMonth =
@@ -73,13 +72,15 @@ export function CalendarScreen({ state, today, onSave, onGoSettle }: Props) {
   return (
     <div className="screen">
       <section className="headline card">
-        <p className="headline__label">다음 급여({formatShortDate(payday)}) 전날까지</p>
+        <p className="headline__label">
+          {horizon.nextIncome
+            ? `다음 입금(${formatShortDate(horizon.nextIncome)}) 전날까지`
+            : '앞으로 30일'}
+        </p>
         <p className={`headline__amount ${headline < 0 ? 'is-negative' : ''}`}>
           {formatWon(headline)}
         </p>
-        <p className="headline__sub">
-          이 돈으로 {daysLeft < 0 ? '오늘까지' : `${daysLeft + 1}일`} 버팁니다
-        </p>
+        <p className="headline__sub">이 돈으로 {daysLeft + 1}일 버팁니다</p>
 
         <dl className="headline__breakdown">
           <div>
@@ -103,6 +104,13 @@ export function CalendarScreen({ state, today, onSave, onGoSettle }: Props) {
             <dd>{upcomingOut === 0 ? '없음' : `− ${formatWon(upcomingOut)}`}</dd>
           </div>
         </dl>
+
+        {!horizon.nextIncome && (
+          <p className="headline__note">
+            예정 입금이 없어 30일 기준으로 보여줍니다. 급여를 예정 입금으로 넣으면 "다음
+            입금까지"로 계산됩니다.
+          </p>
+        )}
 
         <p className="headline__note">
           이건 예상 잔고가 아니라 <b>쓸 수 있는 한도</b>입니다. 변동 지출은 넣지 않습니다 —{' '}
@@ -165,8 +173,7 @@ export function CalendarScreen({ state, today, onSave, onGoSettle }: Props) {
                   'day',
                   cell.isPast ? 'day--past' : '',
                   cell.isToday ? 'day--today' : '',
-                  cell.isCycleEnd ? 'day--cycle-end' : '',
-                  cell.isPayday ? 'day--payday' : '',
+                  cell.isHorizonEnd ? 'day--cycle-end' : '',
                   selected === cell.date ? 'is-selected' : '',
                 ]
                   .filter(Boolean)
@@ -195,20 +202,22 @@ export function CalendarScreen({ state, today, onSave, onGoSettle }: Props) {
 
         <p className="legend">
           <span className="legend__item legend__item--today">오늘</span>
-          <span className="legend__item legend__item--end">주기 마지막 날</span>
-          <span className="legend__item legend__item--payday">급여일</span>
+          <span className="legend__item legend__item--end">
+            {horizon.nextIncome ? '다음 입금 전날' : '30일 뒤'}
+          </span>
           <span className="legend__hint">날짜를 누르면 그 날의 예정을 넣을 수 있습니다.</span>
         </p>
-
       </section>
 
       <section className="card">
-        <h2 className="card__title">이번 주기에 남은 예정</h2>
+        <h2 className="card__title">
+          {horizon.nextIncome ? '다음 입금 전날까지 남은 예정' : '앞으로 30일 예정'}
+        </h2>
         {upcoming.length === 0 ? (
           <p className="muted">
             {state.entries.length === 0
               ? '아직 예정된 입금·출금이 없습니다. 달력에서 날짜를 누르거나 설정에서 추가하세요.'
-              : '다음 급여일까지 예정된 입금·출금이 없습니다.'}
+              : '이 구간에 예정된 입금·출금이 없습니다.'}
           </p>
         ) : (
           <ul className="list">
@@ -253,15 +262,18 @@ type Cell = {
   items: Occurrence[];
   isPast: boolean;
   isToday: boolean;
-  isCycleEnd: boolean;
-  isPayday: boolean;
+  isHorizonEnd: boolean;
 };
 
-function buildMonth(state: State, year: number, month0: number, today: ISODate): (Cell | null)[] {
+function buildMonth(
+  state: State,
+  year: number,
+  month0: number,
+  today: ISODate,
+  horizon: Horizon,
+): (Cell | null)[] {
   const total = daysInMonth(year, month0);
   const leading = new Date(year, month0, 1).getDay();
-  const cycle = cycleOf(state.payday, today);
-  const payday = nextPayday(cycle);
 
   const cells: (Cell | null)[] = Array.from({ length: leading }, () => null);
 
@@ -275,8 +287,7 @@ function buildMonth(state: State, year: number, month0: number, today: ISODate):
       items,
       isPast: compareDate(date, today) < 0,
       isToday: date === today,
-      isCycleEnd: date === cycle.end,
-      isPayday: date === payday || date === cycle.start,
+      isHorizonEnd: date === horizon.end,
     });
   }
 

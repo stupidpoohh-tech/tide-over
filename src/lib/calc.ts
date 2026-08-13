@@ -5,14 +5,13 @@ import {
   compareDate,
   dateOfInstant,
   dayInMonth,
+  diffDays,
   fromISODate,
   toISODate,
 } from './date';
 import { type Entry, type State, signedAmount } from './types';
 
 export type Occurrence = { date: ISODate; entry: Entry };
-
-export type Cycle = { start: ISODate; end: ISODate };
 
 /**
  * (after, through] 구간에 잡히는 예정 입금·출금.
@@ -24,28 +23,35 @@ export function occurrences(entries: Entry[], after: ISODate, through: ISODate):
   const out: Occurrence[] = [];
 
   for (const entry of entries) {
-    if (entry.schedule.type !== 'once') continue;
-    const date = entry.schedule.date;
-    if (compareDate(date, after) > 0 && compareDate(date, through) <= 0) {
-      out.push({ date, entry });
-    }
-  }
+    const s = entry.schedule;
 
-  if (entries.some((e) => e.schedule.type === 'monthly')) {
-    const start = fromISODate(after);
-    const end = fromISODate(through);
-    let cursor = { year: start.getFullYear(), month0: start.getMonth() };
-    const lastMonth = end.getFullYear() * 12 + end.getMonth();
-
-    while (cursor.year * 12 + cursor.month0 <= lastMonth) {
-      for (const entry of entries) {
-        if (entry.schedule.type !== 'monthly') continue;
-        const date = dayInMonth(cursor.year, cursor.month0, entry.schedule.day);
+    if (s.type === 'once') {
+      if (compareDate(s.date, after) > 0 && compareDate(s.date, through) <= 0) {
+        out.push({ date: s.date, entry });
+      }
+    } else if (s.type === 'every') {
+      if (s.days < 1) continue; // 잘못된 데이터로 무한 루프를 돌지 않게
+      // anchor + k·days 중 after보다 뒤인 첫 k로 바로 점프한다.
+      const gap = diffDays(s.anchor, after);
+      const k = gap >= 0 ? Math.floor(gap / s.days) + 1 : 0;
+      let date = addDays(s.anchor, k * s.days);
+      while (compareDate(date, through) <= 0) {
+        out.push({ date, entry });
+        date = addDays(date, s.days);
+      }
+    } else {
+      // monthly: 구간에 걸친 달을 돌며 그 달의 지정일(없으면 말일)을 잡는다.
+      const start = fromISODate(after);
+      const end = fromISODate(through);
+      let cursor = { year: start.getFullYear(), month0: start.getMonth() };
+      const lastMonth = end.getFullYear() * 12 + end.getMonth();
+      while (cursor.year * 12 + cursor.month0 <= lastMonth) {
+        const date = dayInMonth(cursor.year, cursor.month0, s.day);
         if (compareDate(date, after) > 0 && compareDate(date, through) <= 0) {
           out.push({ date, entry });
         }
+        cursor = addMonths(cursor.year, cursor.month0, 1);
       }
-      cursor = addMonths(cursor.year, cursor.month0, 1);
     }
   }
 
@@ -72,28 +78,20 @@ export function netBetween(entries: Entry[], after: ISODate, through: ISODate): 
 }
 
 /**
- * 오늘이 속한 주기. 급여일 ~ 다음 급여 전날.
- * 급여일이 말일보다 크면 말일로 당겨진다.
+ * 머리 숫자의 끝점. 급여일 설정은 없고, 급여도 그냥 예정 입금이다.
+ * 다음 예정 입금이 있으면 그 전날까지, 없으면 30일 기준으로 본다.
  */
-export function cycleOf(payday: number, today: ISODate): Cycle {
-  const d = fromISODate(today);
-  let year = d.getFullYear();
-  let month0 = d.getMonth();
+export type Horizon = { end: ISODate; nextIncome: ISODate | null };
 
-  // 이번 달 급여일이 아직 안 왔으면 주기는 지난달 급여일에 시작한 것이다.
-  if (compareDate(today, dayInMonth(year, month0, payday)) < 0) {
-    ({ year, month0 } = addMonths(year, month0, -1));
-  }
+/** 매달 반복이 말일로 당겨져도 최소 한 번은 잡히는 넉넉한 탐색 범위. */
+const SEARCH_DAYS = 400;
+const FALLBACK_DAYS = 30;
 
-  const start = dayInMonth(year, month0, payday);
-  const next = addMonths(year, month0, 1);
-  const end = addDays(dayInMonth(next.year, next.month0, payday), -1);
-  return { start, end };
-}
-
-/** 주기의 마지막 날 다음 날 = 다음 급여일. */
-export function nextPayday(cycle: Cycle): ISODate {
-  return addDays(cycle.end, 1);
+export function horizonOf(entries: Entry[], today: ISODate): Horizon {
+  const incomes = entries.filter((e) => e.kind === 'income');
+  const next = occurrences(incomes, today, addDays(today, SEARCH_DAYS))[0]?.date;
+  if (next) return { end: addDays(next, -1), nextIncome: next };
+  return { end: addDays(today, FALLBACK_DAYS), nextIncome: null };
 }
 
 /**
@@ -106,9 +104,9 @@ export function limitOn(state: State, date: ISODate, today: ISODate): number {
   return state.balance.amount + netBetween(state.entries, today, date);
 }
 
-/** 머리 숫자 — 다음 급여 전날까지 남는 한도. */
+/** 머리 숫자 — 다음 입금 전날(또는 30일 뒤)까지 남는 한도. */
 export function headlineLimit(state: State, today: ISODate): number {
-  return limitOn(state, cycleOf(state.payday, today).end, today);
+  return limitOn(state, horizonOf(state.entries, today).end, today);
 }
 
 export type Settlement = {
@@ -144,9 +142,9 @@ export function settle(state: State, newAmount: number, now: Date = new Date()):
   };
 }
 
-/** 오늘 이후 ~ 주기 끝까지 남은 예정. */
-export function upcomingInCycle(state: State, today: ISODate): Occurrence[] {
-  return occurrences(state.entries, today, cycleOf(state.payday, today).end);
+/** 오늘 이후 ~ 머리 숫자 끝점까지 남은 예정. */
+export function upcomingInHorizon(state: State, today: ISODate): Occurrence[] {
+  return occurrences(state.entries, today, horizonOf(state.entries, today).end);
 }
 
 /** 하루치 (전날, 그날] 구간의 예정. */

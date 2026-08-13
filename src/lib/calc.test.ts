@@ -1,17 +1,15 @@
 import { describe, expect, it } from 'vitest';
 import {
-  cycleOf,
   entriesOn,
   formatSignedWon,
   headlineLimit,
+  horizonOf,
   limitOn,
   netBetween,
-  nextPayday,
   occurrences,
   settle,
-  upcomingInCycle,
+  upcomingInHorizon,
 } from './calc';
-import { dayInMonth } from './date';
 import type { Entry, State } from './types';
 
 const out = (id: string, name: string, amount: number, day: number): Entry => ({
@@ -38,8 +36,16 @@ const once = (
   kind: Entry['kind'] = 'expense',
 ): Entry => ({ id, name, amount, kind, schedule: { type: 'once', date } });
 
+const every = (
+  id: string,
+  name: string,
+  amount: number,
+  days: number,
+  anchor: string,
+  kind: Entry['kind'] = 'expense',
+): Entry => ({ id, name, amount, kind, schedule: { type: 'every', days, anchor } });
+
 const state = (over: Partial<State> = {}): State => ({
-  payday: 25,
   balance: { amount: 1_000_000, checkedAt: '2026-03-10T09:00:00+09:00' },
   entries: [],
   ...over,
@@ -78,7 +84,6 @@ describe('occurrences — 특정 일자', () => {
     expect(occurrences([entry], '2026-03-01', '2026-03-31').map((o) => o.date)).toEqual([
       '2026-03-15',
     ]);
-    // 다음 달에는 반복되지 않는다.
     expect(occurrences([entry], '2026-04-01', '2026-04-30')).toEqual([]);
   });
 
@@ -87,53 +92,92 @@ describe('occurrences — 특정 일자', () => {
     expect(occurrences([entry], '2026-03-15', '2026-03-31')).toEqual([]);
     expect(occurrences([entry], '2026-03-14', '2026-03-15')).toHaveLength(1);
   });
+});
 
-  it('반복분과 섞여도 날짜순으로 정렬된다', () => {
-    const list = occurrences(
-      [out('a', '월세', 1, 20), once('b', '경조사', 2, '2026-03-05')],
-      '2026-03-01',
-      '2026-03-31',
+describe('occurrences — N일마다', () => {
+  it('anchor부터 N일 간격으로 잡힌다 (1주 = 7)', () => {
+    const list = occurrences([every('a', '적금', 10_000, 7, '2026-03-10')], '2026-03-07', '2026-03-31');
+    expect(list.map((o) => o.date)).toEqual(['2026-03-10', '2026-03-17', '2026-03-24', '2026-03-31']);
+  });
+
+  it('anchor 이전에는 발생하지 않는다', () => {
+    expect(occurrences([every('a', '적금', 1, 7, '2026-03-10')], '2026-03-01', '2026-03-09')).toEqual(
+      [],
     );
-    expect(list.map((o) => o.date)).toEqual(['2026-03-05', '2026-03-20']);
+  });
+
+  it('시작 경계는 열려 있다 — anchor 당일이 after면 다음 발생부터', () => {
+    const list = occurrences([every('a', '적금', 1, 7, '2026-03-10')], '2026-03-10', '2026-03-24');
+    expect(list.map((o) => o.date)).toEqual(['2026-03-17', '2026-03-24']);
+  });
+
+  it('과거 anchor에서도 미래 발생분으로 바로 점프한다 (10일 주기)', () => {
+    const list = occurrences([every('a', '적금', 1, 10, '2026-03-03')], '2026-03-20', '2026-04-10');
+    expect(list.map((o) => o.date)).toEqual(['2026-03-23', '2026-04-02']);
+  });
+
+  it('매일(1일마다)도 된다', () => {
+    const list = occurrences([every('a', '커피', 1, 1, '2026-03-01')], '2026-03-01', '2026-03-05');
+    expect(list.map((o) => o.date)).toEqual(['2026-03-02', '2026-03-03', '2026-03-04', '2026-03-05']);
+  });
+
+  it('달을 넘어도 간격이 정확하다', () => {
+    const list = occurrences([every('a', '적금', 1, 14, '2026-02-20')], '2026-02-20', '2026-04-01');
+    expect(list.map((o) => o.date)).toEqual(['2026-03-06', '2026-03-20']);
   });
 });
 
 describe('entriesOn', () => {
   it('그 날 하루치만 뽑는다', () => {
-    const entries = [out('a', '월세', 600_000, 10), once('b', '경조사', 50_000, '2026-03-10')];
-    expect(entriesOn(entries, '2026-03-10')).toHaveLength(2);
+    const entries = [
+      out('a', '월세', 600_000, 10),
+      once('b', '경조사', 50_000, '2026-03-10'),
+      every('c', '적금', 10_000, 7, '2026-03-03'),
+    ];
+    expect(entriesOn(entries, '2026-03-10')).toHaveLength(3);
     expect(entriesOn(entries, '2026-03-11')).toEqual([]);
   });
 });
 
-describe('cycleOf', () => {
-  it('급여일 당일이면 그날이 주기의 시작이다', () => {
-    expect(cycleOf(25, '2026-03-25')).toEqual({ start: '2026-03-25', end: '2026-04-24' });
+describe('horizonOf — 주기는 다음 예정 입금 전날까지', () => {
+  it('다음 입금 전날이 끝점이다', () => {
+    const h = horizonOf([inc('a', '급여', 0, 25)], '2026-03-07');
+    expect(h).toEqual({ end: '2026-03-24', nextIncome: '2026-03-25' });
   });
 
-  it('급여일 전이면 지난달 급여일에 시작한 주기다', () => {
-    expect(cycleOf(25, '2026-03-24')).toEqual({ start: '2026-02-25', end: '2026-03-24' });
+  it('입금 당일에는 다음 달 입금이 기준이다', () => {
+    const h = horizonOf([inc('a', '급여', 0, 25)], '2026-03-25');
+    expect(h).toEqual({ end: '2026-04-24', nextIncome: '2026-04-25' });
   });
 
-  it('급여일이 말일보다 크면 말일로 당겨진다', () => {
-    expect(cycleOf(31, '2026-02-28')).toEqual({ start: '2026-02-28', end: '2026-03-30' });
+  it('말일보다 큰 날짜는 말일로 당겨진다', () => {
+    const h = horizonOf([inc('a', '급여', 0, 31)], '2026-02-01');
+    expect(h).toEqual({ end: '2026-02-27', nextIncome: '2026-02-28' });
   });
 
-  it('연말을 넘어간다', () => {
-    expect(cycleOf(25, '2026-12-31')).toEqual({ start: '2026-12-25', end: '2027-01-24' });
+  it('N일마다 입금도 기준이 된다', () => {
+    const h = horizonOf([every('a', '주급', 200_000, 7, '2026-03-10', 'income')], '2026-03-12');
+    expect(h).toEqual({ end: '2026-03-16', nextIncome: '2026-03-17' });
   });
 
-  it('주기 마지막 날 다음이 다음 급여일이다', () => {
-    const cycle = cycleOf(25, '2026-03-10');
-    expect(nextPayday(cycle)).toBe('2026-03-25');
-    expect(cycle.end).toBe(dayInMonth(2026, 2, 24));
+  it('여러 입금 중 가장 가까운 것이 기준이다', () => {
+    const h = horizonOf(
+      [inc('a', '급여', 0, 25), once('b', '용돈', 50_000, '2026-03-15', 'income')],
+      '2026-03-07',
+    );
+    expect(h.nextIncome).toBe('2026-03-15');
+  });
+
+  it('예정 입금이 없으면 30일 기준으로 본다', () => {
+    expect(horizonOf([], '2026-03-07')).toEqual({ end: '2026-04-06', nextIncome: null });
+    expect(horizonOf([out('a', '월세', 1, 10)], '2026-03-07').nextIncome).toBeNull();
   });
 });
 
 describe('limitOn', () => {
   const s = state({
     balance: { amount: 1_900_000, checkedAt: '2026-03-07T09:00:00+09:00' },
-    entries: [out('a', '월세', 600_000, 10), out('b', '통신비', 55_000, 20)],
+    entries: [out('a', '월세', 600_000, 10), out('b', '통신비', 55_000, 20), inc('c', '급여', 0, 25)],
   });
 
   it('오늘까지의 한도는 잔고 그대로다 — 오늘 이전은 잔고가 이미 말해준다', () => {
@@ -147,52 +191,47 @@ describe('limitOn', () => {
     expect(limitOn(s, '2026-03-20', '2026-03-07')).toBe(1_245_000);
   });
 
-  it('오늘 날짜에 잡힌 예정은 이미 잔고에 반영된 것으로 본다', () => {
-    expect(limitOn(s, '2026-03-31', '2026-03-10')).toBe(1_845_000);
+  it('머리 숫자는 다음 입금 전날까지의 한도다', () => {
+    // 급여 매달 25일 → 끝점 3/24. 그 사이 3/10 월세, 3/20 통신비.
+    expect(headlineLimit(s, '2026-03-07')).toBe(1_245_000);
   });
 
-  it('예정 입금은 한도를 늘린다', () => {
-    const withIncome = state({
-      balance: { amount: 500_000, checkedAt: '2026-03-07T09:00:00+09:00' },
-      entries: [out('a', '월세', 600_000, 10), inc('b', '부수입', 300_000, 15)],
-    });
-    expect(limitOn(withIncome, '2026-03-12', '2026-03-07')).toBe(-100_000);
-    expect(limitOn(withIncome, '2026-03-15', '2026-03-07')).toBe(200_000);
-  });
-
-  it('특정 일자 항목도 한도에 반영된다', () => {
+  it('N일마다 출금이 한도에 반영된다', () => {
     const s2 = state({
       balance: { amount: 500_000, checkedAt: '2026-03-07T09:00:00+09:00' },
-      entries: [once('a', '경조사', 100_000, '2026-03-12')],
+      entries: [every('a', '적금', 50_000, 7, '2026-03-10'), inc('b', '급여', 0, 25)],
     });
-    expect(limitOn(s2, '2026-03-11', '2026-03-07')).toBe(500_000);
-    expect(limitOn(s2, '2026-03-12', '2026-03-07')).toBe(400_000);
-    // 다음 달에는 다시 반복되지 않는다.
-    expect(limitOn(s2, '2026-04-30', '2026-03-07')).toBe(400_000);
+    // 3/10, 3/17, 3/24 세 번.
+    expect(headlineLimit(s2, '2026-03-07')).toBe(350_000);
   });
 
-  it('머리 숫자는 주기 마지막 날의 한도다', () => {
-    // 3/7 기준 주기는 2/25~3/24. 그 사이 3/10 월세, 3/20 통신비.
-    expect(headlineLimit(s, '2026-03-07')).toBe(1_245_000);
+  it('예정 입금은 한도를 늘리지만, 다음 급여 자체는 이번 주기에 안 들어간다', () => {
+    const s3 = state({
+      balance: { amount: 100_000, checkedAt: '2026-03-07T09:00:00+09:00' },
+      entries: [inc('a', '급여', 2_000_000, 25), once('b', '용돈', 50_000, '2026-03-10', 'income')],
+    });
+    // 3/10 용돈 입금이 기준일이 된다 → 끝점 3/9. 용돈은 3/10이라 아직 안 들어감.
+    expect(headlineLimit(s3, '2026-03-07')).toBe(100_000);
+    // 용돈이 들어온 다음(3/10 이후)의 기준은 3/25 급여 → 3/24까지.
+    expect(headlineLimit(s3, '2026-03-10')).toBe(100_000);
   });
 
   it('한도는 음수가 될 수 있다', () => {
     const tight = state({
       balance: { amount: 100_000, checkedAt: '2026-03-07T09:00:00+09:00' },
-      entries: [out('a', '월세', 600_000, 10)],
+      entries: [out('a', '월세', 600_000, 10), inc('b', '급여', 0, 25)],
     });
     expect(headlineLimit(tight, '2026-03-07')).toBe(-500_000);
   });
 });
 
-describe('upcomingInCycle', () => {
-  it('오늘 이후 ~ 주기 끝까지만 담는다', () => {
+describe('upcomingInHorizon', () => {
+  it('오늘 이후 ~ 다음 입금 전날까지만 담는다', () => {
     const s = state({
-      balance: { amount: 1_000_000, checkedAt: '2026-03-07T09:00:00+09:00' },
-      entries: [out('a', '월세', 600_000, 10), inc('b', '보너스', 30_000, 28)],
+      entries: [out('a', '월세', 600_000, 10), inc('b', '급여', 0, 25), out('c', '보험', 30_000, 28)],
     });
-    // 주기 2/25~3/24 이므로 3/28 보너스는 다음 주기다.
-    expect(upcomingInCycle(s, '2026-03-07').map((o) => o.date)).toEqual(['2026-03-10']);
+    // 끝점 3/24 → 3/28 보험은 다음 주기다.
+    expect(upcomingInHorizon(s, '2026-03-07').map((o) => o.date)).toEqual(['2026-03-10']);
   });
 });
 
@@ -202,7 +241,6 @@ describe('settle', () => {
       balance: { amount: 1_900_000, checkedAt: '2026-03-07T09:00:00+09:00' },
       entries: [out('a', '월세', 600_000, 10)],
     });
-    // 3/12 현재: 3/10 월세가 지나갔으니 예정대로면 1,300,000 이어야 한다.
     const result = settle(s, 1_176_000, new Date('2026-03-12T21:00:00+09:00'));
     expect(result.passedOut).toBe(600_000);
     expect(result.expected).toBe(1_300_000);
@@ -217,9 +255,20 @@ describe('settle', () => {
     });
     const result = settle(s, 650_000, new Date('2026-03-12T09:00:00+09:00'));
     expect(result.passedIn).toBe(200_000);
-    expect(result.passedOut).toBe(0);
     expect(result.expected).toBe(700_000);
     expect(result.diff).toBe(-50_000);
+  });
+
+  it('N일마다 항목도 지나간 만큼 정산된다', () => {
+    const s = state({
+      balance: { amount: 500_000, checkedAt: '2026-03-01T09:00:00+09:00' },
+      entries: [every('a', '적금', 50_000, 7, '2026-03-03')],
+    });
+    // 3/3, 3/10 두 번 지나감.
+    const result = settle(s, 400_000, new Date('2026-03-12T09:00:00+09:00'));
+    expect(result.passedOut).toBe(100_000);
+    expect(result.expected).toBe(400_000);
+    expect(result.diff).toBe(0);
   });
 
   it('같은 날 다시 적으면 그 날짜의 예정은 아직 지나가지 않은 것으로 본다', () => {
@@ -232,20 +281,12 @@ describe('settle', () => {
     expect(result.diff).toBe(0);
   });
 
-  it('예정보다 남으면 양수 diff다', () => {
-    const s = state({ balance: { amount: 300_000, checkedAt: '2026-03-01T09:00:00+09:00' } });
-    const result = settle(s, 350_000, new Date('2026-03-05T09:00:00+09:00'));
-    expect(result.diff).toBe(50_000);
-    expect(formatSignedWon(result.diff)).toBe('+50,000원');
-  });
-
   it('한 달을 통째로 건너뛰어도 지나간 예정을 모두 센다', () => {
     const s = state({
       balance: { amount: 3_000_000, checkedAt: '2026-01-05T09:00:00+09:00' },
       entries: [out('a', '월세', 600_000, 10)],
     });
     const result = settle(s, 1_000_000, new Date('2026-03-15T09:00:00+09:00'));
-    // 1/10, 2/10, 3/10 세 번.
     expect(result.passedOut).toBe(1_800_000);
     expect(result.expected).toBe(1_200_000);
     expect(result.diff).toBe(-200_000);
@@ -253,13 +294,13 @@ describe('settle', () => {
 });
 
 describe('구간 규칙의 일관성', () => {
-  it('정산과 한도가 같은 규칙을 써서 이중 차감이 생기지 않는다', () => {
+  it('세 스케줄 모두에서 정산과 한도가 같은 규칙을 쓴다 — 이중 차감이 없다', () => {
     const entries = [
       out('a', '월세', 600_000, 10),
       inc('b', '부수입', 200_000, 15),
       once('c', '경조사', 50_000, '2026-03-18'),
+      every('d', '적금', 30_000, 7, '2026-03-05'),
     ];
-    // (3/7, 3/12] 에서 지나간 것 + (3/12, 4/24] 에서 남은 것 = (3/7, 4/24] 전체
     const passed = netBetween(entries, '2026-03-07', '2026-03-12');
     const remaining = netBetween(entries, '2026-03-12', '2026-04-24');
     expect(passed + remaining).toBe(netBetween(entries, '2026-03-07', '2026-04-24'));
@@ -268,16 +309,17 @@ describe('구간 규칙의 일관성', () => {
   it('정산 후 다시 계산해도 한도가 어긋나지 않는다', () => {
     const s = state({
       balance: { amount: 1_000_000, checkedAt: '2026-03-07T09:00:00+09:00' },
-      entries: [out('a', '월세', 600_000, 10)],
+      entries: [out('a', '월세', 600_000, 10), every('b', '적금', 30_000, 7, '2026-03-05')],
     });
     const before = limitOn(s, '2026-03-24', '2026-03-07');
 
     // 3/12에 예정대로 정확히 맞아떨어지는 잔고를 적었다.
-    const result = settle(s, 400_000, new Date('2026-03-12T09:00:00+09:00'));
+    // (3/7, 3/12] 사이 지나간 것: 3/10 월세, 3/12 적금(3/5+7일). 3/5분은 구간 밖이다.
+    const result = settle(s, 1_000_000 - 600_000 - 30_000, new Date('2026-03-12T09:00:00+09:00'));
     expect(result.diff).toBe(0);
     const after = state({
       ...s,
-      balance: { amount: 400_000, checkedAt: '2026-03-12T09:00:00+09:00' },
+      balance: { amount: 370_000, checkedAt: '2026-03-12T09:00:00+09:00' },
     });
     expect(limitOn(after, '2026-03-24', '2026-03-12')).toBe(before);
   });

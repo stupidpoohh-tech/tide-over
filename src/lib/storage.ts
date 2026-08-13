@@ -1,6 +1,6 @@
-import { type State, isState } from './types';
+import { type State, isState, newId } from './types';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 const SCHEMA_KEY = 'tideover.schema';
 const STATE_KEY = 'tideover.state';
@@ -87,6 +87,41 @@ const MIGRATIONS: Record<number, (data: unknown) => unknown> = {
         schedule: { type: 'monthly', day: f.day },
       })),
     };
+  },
+  /**
+   * v2: 급여일이 별도 필드였다.
+   * v3: 급여도 예정 입금이다 — payday를 '급여' 입금 항목으로 바꿔 넣고 필드를 없앤다.
+   * 금액은 알 수 없으므로 0으로 넣는다. 0원 입금은 계산에 아무 영향이 없고,
+   * 주기(다음 입금 전날까지)만 이전과 똑같이 유지해 준다.
+   */
+  2: (data) => {
+    const old = data as { payday?: unknown; balance?: unknown; entries?: unknown };
+    const entries = Array.isArray(old.entries) ? [...old.entries] : [];
+    const day = old.payday;
+
+    const alreadyHasPaydayIncome = entries.some((e) => {
+      const entry = e as {
+        kind?: unknown;
+        schedule?: { type?: unknown; day?: unknown };
+      };
+      return (
+        entry?.kind === 'income' &&
+        entry?.schedule?.type === 'monthly' &&
+        entry?.schedule?.day === day
+      );
+    });
+
+    if (typeof day === 'number' && !alreadyHasPaydayIncome) {
+      entries.push({
+        id: newId(),
+        name: '급여',
+        amount: 0,
+        kind: 'income',
+        schedule: { type: 'monthly', day },
+      });
+    }
+
+    return { balance: old.balance, entries };
   },
 };
 

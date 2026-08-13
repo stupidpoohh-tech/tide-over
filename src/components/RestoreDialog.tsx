@@ -72,10 +72,6 @@ function Summary({
             <dd>{formatInstant(state.balance.checkedAt)}</dd>
           </div>
           <div>
-            <dt>급여일</dt>
-            <dd>매달 {state.payday}일</dd>
-          </div>
-          <div>
             <dt>예정 항목</dt>
             <dd>{state.entries.length}건</dd>
           </div>
