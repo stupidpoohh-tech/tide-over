@@ -1450,3 +1450,42 @@ input[type='date'] {
   text-align: left;
   cursor: pointer;
 }
+
+/* --- 형제 서비스 안내 --- */
+
+.promo {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  color: inherit;
+  text-decoration: none;
+}
+
+.promo__main {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.promo__main b {
+  font-size: 15px;
+  letter-spacing: -0.01em;
+}
+
+.promo__main .muted {
+  font-size: 13px;
+}
+
+.promo__go {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border-radius: 9px;
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 15px;
+}

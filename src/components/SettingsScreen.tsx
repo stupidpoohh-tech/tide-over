@@ -6,6 +6,8 @@ import type { PersistenceStatus } from '../lib/storage';
 import type { State } from '../lib/types';
 import { RestoreField, extractPayload } from './WipedNotice';
 
+const LOAN_EARLY_URL = 'https://loan-early.vercel.app/';
+
 type Props = {
   state: State;
   persistence: PersistenceStatus;
@@ -49,6 +51,20 @@ export function SettingsScreen({
 
   return (
     <div className="screen">
+      {/*
+        형제 서비스 안내. 데이터를 주고받지는 않는다 — 이 앱은 "다음 입금까지 버티기"고
+        저쪽은 "몇 년 뒤 이자 아끼기"라 시간 축이 달라서, 링크로만 이어둔다.
+      */}
+      <a className="card promo" href={LOAN_EARLY_URL} target="_blank" rel="noopener noreferrer">
+        <span className="promo__main">
+          <b>조기상환 계산기</b>
+          <span className="muted">대출을 미리 갚으면 이자를 얼마나 아끼는지 계산합니다</span>
+        </span>
+        <span className="promo__go" aria-hidden="true">
+          ↗
+        </span>
+      </a>
+
       <section className="card">
         <h2 className="card__title">백업</h2>
         <p className="muted">
