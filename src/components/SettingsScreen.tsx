@@ -55,15 +55,21 @@ export function SettingsScreen({
         형제 서비스 안내. 데이터를 주고받지는 않는다 — 이 앱은 "다음 입금까지 버티기"고
         저쪽은 "몇 년 뒤 이자 아끼기"라 시간 축이 달라서, 링크로만 이어둔다.
       */}
-      <a className="card promo" href={LOAN_EARLY_URL} target="_blank" rel="noopener noreferrer">
-        <span className="promo__main">
-          <b>조기상환 계산기</b>
-          <span className="muted">대출을 미리 갚으면 이자를 얼마나 아끼는지 계산합니다</span>
-        </span>
-        <span className="promo__go" aria-hidden="true">
-          ↗
-        </span>
-      </a>
+      <section className="card">
+        <h2 className="card__title">서비스 더보기</h2>
+        <a className="promo" href={LOAN_EARLY_URL} target="_blank" rel="noopener noreferrer">
+          <span className="promo__icon" aria-hidden="true">
+            <CalculatorIcon />
+          </span>
+          <span className="promo__main">
+            <b>조기상환 계산기</b>
+            <span className="muted">대출을 미리 갚으면 이자를 얼마나 아끼는지 계산합니다.</span>
+          </span>
+          <span className="promo__go" aria-hidden="true">
+            ›
+          </span>
+        </a>
+      </section>
 
       <section className="card">
         <h2 className="card__title">백업</h2>
@@ -151,6 +157,22 @@ export function SettingsScreen({
         )}
       </section>
     </div>
+  );
+}
+
+/** 계산기 글리프. 외부 리소스를 쓰지 않으려고 인라인 SVG로 그린다. */
+function CalculatorIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <rect x="4" y="3" width="16" height="18" rx="3" />
+      <rect x="7.5" y="6.5" width="9" height="3.5" rx="1" />
+      <circle cx="8.5" cy="14" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="14" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15.5" cy="14" r="1" fill="currentColor" stroke="none" />
+      <circle cx="8.5" cy="17.5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="12" cy="17.5" r="1" fill="currentColor" stroke="none" />
+      <circle cx="15.5" cy="17.5" r="1" fill="currentColor" stroke="none" />
+    </svg>
   );
 }
 

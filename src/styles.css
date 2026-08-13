@@ -1456,17 +1456,29 @@ input[type='date'] {
 .promo {
   display: flex;
   align-items: center;
-  justify-content: space-between;
   gap: 12px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--surface-2);
   color: inherit;
   text-decoration: none;
+}
+
+.promo__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  color: var(--accent);
 }
 
 .promo__main {
   display: flex;
   min-width: 0;
+  flex: 1;
   flex-direction: column;
-  gap: 2px;
+  gap: 1px;
 }
 
 .promo__main b {
@@ -1476,16 +1488,12 @@ input[type='date'] {
 
 .promo__main .muted {
   font-size: 13px;
+  line-height: 1.4;
 }
 
 .promo__go {
   flex: none;
-  width: 32px;
-  height: 32px;
-  display: grid;
-  place-items: center;
-  border-radius: 9px;
-  background: var(--surface-2);
   color: var(--muted);
-  font-size: 15px;
+  font-size: 18px;
+  line-height: 1;
 }
