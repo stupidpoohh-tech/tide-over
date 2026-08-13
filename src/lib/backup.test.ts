@@ -11,9 +11,22 @@ import type { State } from './types';
 const sample: State = {
   payday: 25,
   balance: { amount: 1_900_000, checkedAt: '2026-03-07T09:00:00.000Z' },
-  fixed: [
-    { id: 'a', name: '월세', amount: 600_000, day: 10 },
-    { id: 'b', name: '통신비 📱', amount: 55_000, day: 20 },
+  entries: [
+    { id: 'a', name: '월세', amount: 600_000, kind: 'expense', schedule: { type: 'monthly', day: 10 } },
+    {
+      id: 'b',
+      name: '통신비 📱',
+      amount: 55_000,
+      kind: 'expense',
+      schedule: { type: 'monthly', day: 20 },
+    },
+    {
+      id: 'c',
+      name: '경조사',
+      amount: 100_000,
+      kind: 'income',
+      schedule: { type: 'once', date: '2026-04-02' },
+    },
   ],
 };
 
@@ -49,6 +62,35 @@ describe('encode/decode', () => {
       JSON.stringify({ v: 1, t: '', s: { payday: 99, balance: {}, fixed: [] } }),
     );
     expect(decodeBackup(broken).ok).toBe(false);
+  });
+
+  it('v1 시절에 만든 백업 링크도 그대로 열린다', () => {
+    // 실제로 배포됐던 v1 페이로드 모양.
+    const v1 = base64UrlEncode(
+      JSON.stringify({
+        v: 1,
+        t: '2026-03-07T09:00:00.000Z',
+        s: {
+          payday: 25,
+          balance: { amount: 1_900_000, checkedAt: '2026-03-07T09:00:00.000Z' },
+          fixed: [{ id: 'a', name: '월세', amount: 600_000, day: 10 }],
+        },
+      }),
+    );
+    const result = decodeBackup(v1);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.state.entries).toEqual([
+      {
+        id: 'a',
+        name: '월세',
+        amount: 600_000,
+        kind: 'expense',
+        schedule: { type: 'monthly', day: 10 },
+      },
+    ]);
+    expect(result.state.balance.amount).toBe(1_900_000);
+    expect(result.state.payday).toBe(25);
   });
 
   it('더 최신 스키마 버전의 백업을 거부한다', () => {

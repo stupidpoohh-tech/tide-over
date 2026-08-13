@@ -59,18 +59,27 @@ export function SettleScreen({ state, wasWiped, onRestoreLink, onSave }: Props) 
               <em className="muted"> · {formatInstant(state.balance.checkedAt)}</em>
             </span>
           </div>
+          {result.passedIn > 0 && (
+            <div className="ledger__row">
+              <span>그 사이 지나간 예정 입금</span>
+              <span className="is-income">+ {formatWon(result.passedIn)}</span>
+            </div>
+          )}
           <div className="ledger__row">
-            <span>그 사이 지나간 예정 지출</span>
-            <span>{result.passedTotal === 0 ? '없음' : `− ${formatWon(result.passedTotal)}`}</span>
+            <span>그 사이 지나간 예정 출금</span>
+            <span>{result.passedOut === 0 ? '없음' : `− ${formatWon(result.passedOut)}`}</span>
           </div>
           {result.passed.length > 0 && (
             <ul className="mini-list mini-list--indent">
               {result.passed.map((o, i) => (
-                <li key={`${o.date}-${o.fixed.id}-${i}`}>
+                <li key={`${o.date}-${o.entry.id}-${i}`}>
                   <span>
-                    <span className="muted">{formatShortDate(o.date)}</span> {o.fixed.name}
+                    <span className="muted">{formatShortDate(o.date)}</span> {o.entry.name}
                   </span>
-                  <span>−{formatWon(o.fixed.amount)}</span>
+                  <span className={o.entry.kind === 'income' ? 'is-income' : ''}>
+                    {o.entry.kind === 'income' ? '+' : '−'}
+                    {formatWon(o.entry.amount)}
+                  </span>
                 </li>
               ))}
             </ul>
@@ -118,7 +127,7 @@ export function SettleScreen({ state, wasWiped, onRestoreLink, onSave }: Props) 
         <p>
           입력의 원자는 지출이 아니라 잔고입니다. 통장 잔고를 옮겨 적는 순간,{' '}
           {formatShortDate(checkedAtDate)} 이후의 모든 변동 지출이 한 번에 정산된 것으로 봅니다.
-          달력에는 오늘 이후의 고정 지출만 남습니다.
+          달력에는 오늘 이후의 예정 입금·출금만 남습니다.
         </p>
       </section>
     </div>

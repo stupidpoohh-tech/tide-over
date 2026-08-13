@@ -1,5 +1,5 @@
-import { SCHEMA_VERSION } from './storage';
-import { type State, isState } from './types';
+import { SCHEMA_VERSION, migrateToCurrent } from './storage';
+import type { State } from './types';
 
 /** 해시 파라미터 이름. 링크가 `#b=...` 로 끝난다. */
 const HASH_KEY = 'b';
@@ -40,16 +40,22 @@ export function decodeBackup(payload: string): DecodeResult {
   if (typeof envelope !== 'object' || envelope === null) {
     return { ok: false, reason: '백업 링크의 내용을 해석할 수 없습니다.' };
   }
-  if (typeof envelope.v !== 'number' || envelope.v > SCHEMA_VERSION) {
+  if (typeof envelope.v !== 'number' || !Number.isInteger(envelope.v) || envelope.v < 1) {
+    return { ok: false, reason: '백업 링크의 버전을 읽을 수 없습니다.' };
+  }
+  if (envelope.v > SCHEMA_VERSION) {
     return { ok: false, reason: '더 최신 버전에서 만든 백업 링크입니다. 앱을 새로고침해 주세요.' };
   }
-  if (!isState(envelope.s)) {
+
+  // 예전 버전에 만들어 둔 링크도 그대로 열려야 한다.
+  const state = migrateToCurrent(envelope.s, envelope.v);
+  if (!state) {
     return { ok: false, reason: '백업 링크에 담긴 데이터의 모양이 맞지 않습니다.' };
   }
 
   const exportedAt =
     typeof envelope.t === 'string' && !Number.isNaN(Date.parse(envelope.t)) ? envelope.t : '';
-  return { ok: true, state: envelope.s, exportedAt };
+  return { ok: true, state, exportedAt };
 }
 
 /** 현재 주소를 기준으로 상태 전체를 담은 백업 링크를 만든다. */

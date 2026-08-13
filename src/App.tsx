@@ -66,7 +66,12 @@ export default function App() {
             onRestoreLink={store.offerRestore}
           />
         ) : tab === 'calendar' ? (
-          <CalendarScreen state={state} today={today} onGoSettle={() => setTab('settle')} />
+          <CalendarScreen
+            state={state}
+            today={today}
+            onSave={store.setState}
+            onGoSettle={() => setTab('settle')}
+          />
         ) : tab === 'settle' ? (
           <SettleScreen
             state={state}

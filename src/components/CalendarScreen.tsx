@@ -2,37 +2,41 @@ import { useMemo, useState } from 'react';
 import {
   type Occurrence,
   cycleOf,
+  entriesOn,
   formatWon,
   headlineLimit,
   limitOn,
+  netOf,
   nextPayday,
-  occurrences,
-  sumOccurrences,
+  totalIn,
+  totalOut,
   upcomingInCycle,
 } from '../lib/calc';
 import {
   type ISODate,
+  addMonths,
   compareDate,
-  daysInMonth,
   dateOfInstant,
+  daysInMonth,
   formatDate,
   formatShortDate,
   fromISODate,
-  toISODate,
-  addMonths,
   diffDays,
+  toISODate,
 } from '../lib/date';
-import type { State } from '../lib/types';
+import type { Entry, State } from '../lib/types';
+import { EntryForm } from './EntryForm';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 type Props = {
   state: State;
   today: ISODate;
+  onSave: (next: State) => void;
   onGoSettle: () => void;
 };
 
-export function CalendarScreen({ state, today, onGoSettle }: Props) {
+export function CalendarScreen({ state, today, onSave, onGoSettle }: Props) {
   const todayDate = fromISODate(today);
   const [month, setMonth] = useState(() => ({
     year: todayDate.getFullYear(),
@@ -44,7 +48,8 @@ export function CalendarScreen({ state, today, onGoSettle }: Props) {
   const payday = nextPayday(cycle);
   const headline = useMemo(() => headlineLimit(state, today), [state, today]);
   const upcoming = useMemo(() => upcomingInCycle(state, today), [state, today]);
-  const upcomingTotal = sumOccurrences(upcoming);
+  const upcomingIn = totalIn(upcoming);
+  const upcomingOut = totalOut(upcoming);
   const daysLeft = diffDays(today, cycle.end);
 
   const cells = useMemo(
@@ -57,12 +62,18 @@ export function CalendarScreen({ state, today, onGoSettle }: Props) {
 
   const selectedCell = selected ? cells.find((c) => c?.date === selected) : undefined;
 
+  function addEntry(entry: Entry) {
+    onSave({ ...state, entries: [...state.entries, entry] });
+  }
+
+  function removeEntry(id: string) {
+    onSave({ ...state, entries: state.entries.filter((e) => e.id !== id) });
+  }
+
   return (
     <div className="screen">
       <section className="headline card">
-        <p className="headline__label">
-          다음 급여({formatShortDate(payday)}) 전날까지
-        </p>
+        <p className="headline__label">다음 급여({formatShortDate(payday)}) 전날까지</p>
         <p className={`headline__amount ${headline < 0 ? 'is-negative' : ''}`}>
           {formatWon(headline)}
         </p>
@@ -75,12 +86,21 @@ export function CalendarScreen({ state, today, onGoSettle }: Props) {
             <dt>통장 잔고</dt>
             <dd>
               {formatWon(state.balance.amount)}
-              <span className="muted"> · {formatShortDate(dateOfInstant(state.balance.checkedAt))} 기록</span>
+              <span className="muted">
+                {' '}
+                · {formatShortDate(dateOfInstant(state.balance.checkedAt))} 기록
+              </span>
             </dd>
           </div>
+          {upcomingIn > 0 && (
+            <div>
+              <dt>남은 예정 입금</dt>
+              <dd className="is-income">+ {formatWon(upcomingIn)}</dd>
+            </div>
+          )}
           <div>
-            <dt>남은 예정 지출</dt>
-            <dd>{upcomingTotal === 0 ? '없음' : `− ${formatWon(upcomingTotal)}`}</dd>
+            <dt>남은 예정 출금</dt>
+            <dd>{upcomingOut === 0 ? '없음' : `− ${formatWon(upcomingOut)}`}</dd>
           </div>
         </dl>
 
@@ -157,7 +177,12 @@ export function CalendarScreen({ state, today, onGoSettle }: Props) {
                 }`}
               >
                 <span className="day__num">{fromISODate(cell.date).getDate()}</span>
-                {cell.spend > 0 && <span className="day__spend">−{compact(cell.spend)}</span>}
+                {cell.items.length > 0 && (
+                  <span className={`day__net ${cell.net >= 0 ? 'is-income' : ''}`}>
+                    {cell.net >= 0 ? '+' : '−'}
+                    {compact(Math.abs(cell.net))}
+                  </span>
+                )}
                 {!cell.isPast && (
                   <span className={`day__limit ${cell.limit < 0 ? 'is-negative' : ''}`}>
                     {compact(cell.limit)}
@@ -172,56 +197,39 @@ export function CalendarScreen({ state, today, onGoSettle }: Props) {
           <span className="legend__item legend__item--today">오늘</span>
           <span className="legend__item legend__item--end">주기 마지막 날</span>
           <span className="legend__item legend__item--payday">급여일</span>
+          <span className="legend__hint">날짜를 누르면 그 날의 예정을 넣을 수 있습니다</span>
         </p>
 
         {selectedCell && (
-          <div className="day-detail">
-            <h3>{formatDate(selectedCell.date)}</h3>
-            {selectedCell.isPast ? (
-              <p className="muted">
-                오늘 이전입니다. 지난 일은 달력이 아니라 통장 잔고가 말해줍니다.
-              </p>
-            ) : (
-              <>
-                <p className="day-detail__limit">
-                  이 날까지 쓸 수 있는 한도 <b>{formatWon(selectedCell.limit)}</b>
-                </p>
-                {selectedCell.items.length > 0 ? (
-                  <ul className="mini-list">
-                    {selectedCell.items.map((o) => (
-                      <li key={o.fixed.id}>
-                        <span>{o.fixed.name}</span>
-                        <span>−{formatWon(o.fixed.amount)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="muted">이 날 예정된 고정 지출은 없습니다.</p>
-                )}
-              </>
-            )}
-          </div>
+          <DayDetail
+            cell={selectedCell}
+            today={today}
+            onAdd={addEntry}
+            onRemove={removeEntry}
+            onClose={() => setSelected(null)}
+          />
         )}
       </section>
 
       <section className="card">
-        <h2 className="card__title">이번 주기에 남은 예정 지출</h2>
+        <h2 className="card__title">이번 주기에 남은 예정</h2>
         {upcoming.length === 0 ? (
           <p className="muted">
-            {state.fixed.length === 0
-              ? '아직 고정 지출을 등록하지 않았습니다. 설정에서 추가할 수 있습니다.'
-              : '다음 급여일까지 예정된 지출이 없습니다.'}
+            {state.entries.length === 0
+              ? '아직 예정된 입금·출금이 없습니다. 달력에서 날짜를 누르거나 설정에서 추가하세요.'
+              : '다음 급여일까지 예정된 입금·출금이 없습니다.'}
           </p>
         ) : (
           <ul className="list">
             {upcoming.map((o) => (
-              <li key={`${o.date}-${o.fixed.id}`}>
+              <li key={`${o.date}-${o.entry.id}`}>
                 <span className="list__date">{formatShortDate(o.date)}</span>
-                <span className="list__name">{o.fixed.name}</span>
-                <span className="list__amount">−{formatWon(o.fixed.amount)}</span>
-                <span className="list__after">
-                  → {formatWon(limitOn(state, o.date, today))}
+                <span className="list__name">{o.entry.name}</span>
+                <span className={`list__amount ${o.entry.kind === 'income' ? 'is-income' : ''}`}>
+                  {o.entry.kind === 'income' ? '+' : '−'}
+                  {formatWon(o.entry.amount)}
                 </span>
+                <span className="list__after">→ {formatWon(limitOn(state, o.date, today))}</span>
               </li>
             ))}
           </ul>
@@ -231,10 +239,100 @@ export function CalendarScreen({ state, today, onGoSettle }: Props) {
   );
 }
 
+function DayDetail({
+  cell,
+  today,
+  onAdd,
+  onRemove,
+  onClose,
+}: {
+  cell: Cell;
+  today: ISODate;
+  onAdd: (entry: Entry) => void;
+  onRemove: (id: string) => void;
+  onClose: () => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  /**
+   * 예정은 오늘 이후에만 존재한다. 오늘까지는 잔고가 이미 말해주고 있어서,
+   * 오늘 날짜에 예정을 넣으면 잔고와 이중으로 세어진다.
+   */
+  const canAdd = compareDate(cell.date, today) > 0;
+
+  return (
+    <div className="day-detail">
+      <header className="day-detail__head">
+        <h3>{formatDate(cell.date)}</h3>
+        <button type="button" className="icon-btn" aria-label="닫기" onClick={onClose}>
+          ×
+        </button>
+      </header>
+
+      {!cell.isPast && (
+        <p className="day-detail__limit">
+          이 날까지 쓸 수 있는 한도 <b>{formatWon(cell.limit)}</b>
+        </p>
+      )}
+
+      {cell.items.length > 0 ? (
+        <ul className="mini-list">
+          {cell.items.map((o) => (
+            <li key={o.entry.id}>
+              <span>
+                {o.entry.name}
+                {o.entry.schedule.type === 'monthly' && <em className="tag">매달</em>}
+              </span>
+              <span className="mini-list__right">
+                <span className={o.entry.kind === 'income' ? 'is-income' : 'is-expense'}>
+                  {o.entry.kind === 'income' ? '+' : '−'}
+                  {formatWon(o.entry.amount)}
+                </span>
+                {canAdd && (
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--small icon-btn--danger"
+                    aria-label={`${o.entry.name} 삭제`}
+                    onClick={() => onRemove(o.entry.id)}
+                  >
+                    ×
+                  </button>
+                )}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">이 날 예정된 입금·출금이 없습니다.</p>
+      )}
+
+      {cell.isPast ? (
+        <p className="muted">오늘 이전입니다. 지난 일은 달력이 아니라 통장 잔고가 말해줍니다.</p>
+      ) : !canAdd ? (
+        <p className="muted">
+          오늘까지는 통장 잔고가 말해줍니다. 예정은 내일 날짜부터 넣을 수 있습니다.
+        </p>
+      ) : adding ? (
+        <EntryForm
+          fixedDate={cell.date}
+          onAdd={(entry) => {
+            onAdd(entry);
+            setAdding(false);
+          }}
+          onCancel={() => setAdding(false)}
+        />
+      ) : (
+        <button type="button" className="ghost-btn ghost-btn--block" onClick={() => setAdding(true)}>
+          + 이 날에 입금·출금 추가
+        </button>
+      )}
+    </div>
+  );
+}
+
 type Cell = {
   date: ISODate;
   limit: number;
-  spend: number;
+  net: number;
   items: Occurrence[];
   isPast: boolean;
   isToday: boolean;
@@ -252,11 +350,11 @@ function buildMonth(state: State, year: number, month0: number, today: ISODate):
 
   for (let day = 1; day <= total; day += 1) {
     const date = toISODate(new Date(year, month0, day));
-    const items = occurrences(state.fixed, addDayBefore(date), date);
+    const items = entriesOn(state.entries, date);
     cells.push({
       date,
       limit: limitOn(state, date, today),
-      spend: sumOccurrences(items),
+      net: netOf(items),
       items,
       isPast: compareDate(date, today) < 0,
       isToday: date === today,
@@ -266,13 +364,6 @@ function buildMonth(state: State, year: number, month0: number, today: ISODate):
   }
 
   return cells;
-}
-
-/** 하루짜리 구간을 (전날, 그날]로 만들기 위한 헬퍼. */
-function addDayBefore(date: ISODate): ISODate {
-  const d = fromISODate(date);
-  d.setDate(d.getDate() - 1);
-  return toISODate(d);
 }
 
 /** 달력 칸은 좁아서 만 단위로 줄여 쓴다. */

@@ -1,6 +1,6 @@
 import { type State, isState } from './types';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 const SCHEMA_KEY = 'tideover.schema';
 const STATE_KEY = 'tideover.state';
@@ -57,16 +57,45 @@ export function loadState(): LoadResult {
     return { status: 'corrupt', reason: '저장된 데이터를 해석할 수 없습니다.' };
   }
 
-  const migrated = migrate(parsed, version);
+  const migrated = migrateToCurrent(parsed, version);
   if (!migrated) return { status: 'corrupt', reason: '저장된 데이터의 모양이 맞지 않습니다.' };
+
+  // 올린 결과를 바로 써둔다. 안 그러면 사용자가 뭔가 고칠 때까지 옛 모양이 남아서,
+  // 매번 다시 변환하게 되고 저장소의 버전 키도 실제와 어긋난 채로 있는다.
+  if (version < SCHEMA_VERSION) saveState(migrated);
+
   return { status: 'ok', state: migrated };
 }
 
 /** v -> v+1 변환. 다음 스키마 버전이 생기면 여기에 한 줄씩 늘린다. */
-const MIGRATIONS: Record<number, (data: unknown) => unknown> = {};
+const MIGRATIONS: Record<number, (data: unknown) => unknown> = {
+  /**
+   * v1: fixed[{id,name,amount,day}] — 매달 반복되는 출금만 있었다.
+   * v2: entries[] — 입금/출금 구분과 특정일자 예약이 생겼다.
+   */
+  1: (data) => {
+    const old = data as { payday?: unknown; balance?: unknown; fixed?: unknown };
+    const fixed = Array.isArray(old.fixed) ? old.fixed : [];
+    return {
+      payday: old.payday,
+      balance: old.balance,
+      entries: fixed.map((f: Record<string, unknown>) => ({
+        id: f.id,
+        name: f.name,
+        amount: f.amount,
+        kind: 'expense',
+        schedule: { type: 'monthly', day: f.day },
+      })),
+    };
+  },
+};
 
-/** 옛 버전 데이터를 현재 스키마로 끌어올린다. v1이 첫 버전이라 아직 변환은 없다. */
-function migrate(data: unknown, fromVersion: number): State | null {
+/**
+ * 옛 버전 데이터를 현재 스키마로 끌어올린다.
+ * 저장소와 백업 링크가 같은 경로를 타야 한다 — 예전에 만들어 둔 백업 링크도
+ * 그대로 열려야 하기 때문이다.
+ */
+export function migrateToCurrent(data: unknown, fromVersion: number): State | null {
   let current = data;
   for (let v = fromVersion; v < SCHEMA_VERSION; v += 1) {
     const step = MIGRATIONS[v];

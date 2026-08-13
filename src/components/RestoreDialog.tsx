@@ -90,8 +90,8 @@ function Summary({
             <dd>매달 {state.payday}일</dd>
           </div>
           <div>
-            <dt>고정 지출</dt>
-            <dd>{state.fixed.length}건</dd>
+            <dt>예정 항목</dt>
+            <dd>{state.entries.length}건</dd>
           </div>
         </dl>
       )}

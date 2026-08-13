@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { backupLink } from '../lib/backup';
 import { formatWon } from '../lib/calc';
-import { formatInstant } from '../lib/date';
+import { formatInstant, fromISODate, todayISO } from '../lib/date';
 import { copyText } from '../lib/clipboard';
 import type { PersistenceStatus } from '../lib/storage';
-import { type Fixed, type State, newId } from '../lib/types';
+import { type Entry, type State, signedAmount } from '../lib/types';
+import { EntryForm, KindToggle } from './EntryForm';
 import { MoneyInput } from './MoneyInput';
 import { RestoreField, extractPayload } from './WipedNotice';
 
@@ -39,8 +40,8 @@ export function SettingsScreen({
     onSave({ ...state, ...patch });
   }
 
-  function updateFixed(id: string, patch: Partial<Fixed>) {
-    update({ fixed: state.fixed.map((f) => (f.id === id ? { ...f, ...patch } : f)) });
+  function updateEntry(id: string, patch: Partial<Entry>) {
+    update({ entries: state.entries.map((e) => (e.id === id ? { ...e, ...patch } : e)) });
   }
 
   async function makeBackup() {
@@ -54,6 +55,10 @@ export function SettingsScreen({
         : '복사에 실패했습니다. 아래 링크를 직접 복사해 주세요.',
     );
   }
+
+  const monthlyNet = state.entries
+    .filter((e) => e.schedule.type === 'monthly')
+    .reduce((sum, e) => sum + signedAmount(e), 0);
 
   return (
     <div className="screen">
@@ -81,57 +86,35 @@ export function SettingsScreen({
       </section>
 
       <section className="card">
-        <h2 className="card__title">고정 지출</h2>
+        <h2 className="card__title">예정 수입·지출</h2>
         <p className="muted">
-          매달 같은 날 빠져나가는 돈만 넣으세요. 변동 지출은 넣지 않습니다.
+          매달 반복되는 것과 특정 일자에 한 번 있는 것 모두 넣을 수 있습니다. 아직 오지 않은
+          것만 넣으세요 — 이미 지나간 변동 지출은 잔고가 말해줍니다.
         </p>
 
-        {state.fixed.length > 0 && (
-          <ul className="fixed-list">
-            {state.fixed.map((f) => (
-              <li key={f.id} className="fixed-row">
-                <input
-                  className="fixed-row__name"
-                  type="text"
-                  value={f.name}
-                  placeholder="이름"
-                  onChange={(e) => updateFixed(f.id, { name: e.target.value })}
-                />
-                <div className="fixed-row__amount">
-                  <MoneyInput value={f.amount} onChange={(v) => updateFixed(f.id, { amount: v })} />
-                </div>
-                <div className="fixed-row__day">
-                  <input
-                    type="number"
-                    min={1}
-                    max={31}
-                    inputMode="numeric"
-                    value={f.day}
-                    aria-label={`${f.name} 결제일`}
-                    onChange={(e) => {
-                      const n = Number(e.target.value);
-                      if (Number.isInteger(n) && n >= 1 && n <= 31) updateFixed(f.id, { day: n });
-                    }}
-                  />
-                  <span>일</span>
-                </div>
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--danger"
-                  aria-label={`${f.name} 삭제`}
-                  onClick={() => update({ fixed: state.fixed.filter((x) => x.id !== f.id) })}
-                >
-                  ×
-                </button>
-              </li>
+        {state.entries.length > 0 && (
+          <ul className="entry-list">
+            {state.entries.map((entry) => (
+              <EntryRow
+                key={entry.id}
+                entry={entry}
+                onChange={(patch) => updateEntry(entry.id, patch)}
+                onRemove={() => update({ entries: state.entries.filter((e) => e.id !== entry.id) })}
+              />
             ))}
           </ul>
         )}
 
-        <AddFixed onAdd={(f) => update({ fixed: [...state.fixed, f] })} />
+        <div className="entry-add">
+          <EntryForm onAdd={(entry) => update({ entries: [...state.entries, entry] })} />
+        </div>
 
         <p className="total-line">
-          매달 고정 지출 합계 <b>{formatWon(state.fixed.reduce((s, f) => s + f.amount, 0))}</b>
+          <span>매달 반복분 합계</span>
+          <b className={monthlyNet >= 0 ? 'is-income' : ''}>
+            {monthlyNet >= 0 ? '+' : '−'}
+            {formatWon(Math.abs(monthlyNet))}
+          </b>
         </p>
       </section>
 
@@ -228,56 +211,113 @@ export function SettingsScreen({
   );
 }
 
-function AddFixed({ onAdd }: { onAdd: (f: Fixed) => void }) {
-  const [name, setName] = useState('');
-  const [amount, setAmount] = useState(0);
-  const [day, setDay] = useState(1);
-
-  const valid = name.trim().length > 0 && amount > 0;
-
+function EntryRow({
+  entry,
+  onChange,
+  onRemove,
+}: {
+  entry: Entry;
+  onChange: (patch: Partial<Entry>) => void;
+  onRemove: () => void;
+}) {
   return (
-    <form
-      className="fixed-row fixed-row--add"
-      onSubmit={(e) => {
-        e.preventDefault();
-        if (!valid) return;
-        onAdd({ id: newId(), name: name.trim(), amount, day });
-        setName('');
-        setAmount(0);
-        setDay(1);
-      }}
-    >
-      <input
-        className="fixed-row__name"
-        type="text"
-        value={name}
-        placeholder="예: 월세"
-        aria-label="고정 지출 이름"
-        onChange={(e) => setName(e.target.value)}
-      />
-      <div className="fixed-row__amount">
-        <MoneyInput value={amount} onChange={setAmount} />
-      </div>
-      <div className="fixed-row__day">
+    <li className="entry-row">
+      <div className="entry-row__top">
+        <KindToggle value={entry.kind} onChange={(kind) => onChange({ kind })} />
         <input
-          type="number"
-          min={1}
-          max={31}
-          inputMode="numeric"
-          value={day}
-          aria-label="결제일"
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (Number.isInteger(n) && n >= 1 && n <= 31) setDay(n);
-          }}
+          type="text"
+          className="entry-row__name"
+          value={entry.name}
+          placeholder="이름"
+          aria-label="이름"
+          onChange={(e) => onChange({ name: e.target.value })}
         />
-        <span>일</span>
+        <button
+          type="button"
+          className="icon-btn icon-btn--danger"
+          aria-label={`${entry.name} 삭제`}
+          onClick={onRemove}
+        >
+          ×
+        </button>
       </div>
-      <button type="submit" className="icon-btn" aria-label="고정 지출 추가" disabled={!valid}>
-        +
-      </button>
-    </form>
+
+      <div className="entry-row__bottom">
+        <div className="entry-row__amount">
+          <MoneyInput value={entry.amount} onChange={(amount) => onChange({ amount })} />
+        </div>
+
+        <select
+          value={entry.schedule.type}
+          aria-label="반복"
+          onChange={(e) =>
+            onChange({
+              schedule:
+                e.target.value === 'monthly'
+                  ? {
+                      type: 'monthly',
+                      day:
+                        entry.schedule.type === 'once'
+                          ? fromISODate(entry.schedule.date).getDate()
+                          : entry.schedule.day,
+                    }
+                  : {
+                      type: 'once',
+                      date:
+                        entry.schedule.type === 'monthly'
+                          ? monthlyToDate(entry.schedule.day)
+                          : entry.schedule.date,
+                    },
+            })
+          }
+        >
+          <option value="monthly">매달</option>
+          <option value="once">특정 일자</option>
+        </select>
+
+        {entry.schedule.type === 'monthly' ? (
+          <span className="entry-row__day">
+            <input
+              type="number"
+              min={1}
+              max={31}
+              inputMode="numeric"
+              value={entry.schedule.day}
+              aria-label="반복일"
+              onChange={(e) => {
+                const n = Number(e.target.value);
+                if (Number.isInteger(n) && n >= 1 && n <= 31) {
+                  onChange({ schedule: { type: 'monthly', day: n } });
+                }
+              }}
+            />
+            <span>일</span>
+          </span>
+        ) : (
+          <input
+            type="date"
+            value={entry.schedule.date}
+            aria-label="날짜"
+            onChange={(e) => {
+              if (e.target.value) onChange({ schedule: { type: 'once', date: e.target.value } });
+            }}
+          />
+        )}
+      </div>
+    </li>
   );
+}
+
+/** 매달 N일을 특정 일자로 바꿀 때, 이번 달(또는 다음 달) 그 날짜를 기본값으로 준다. */
+function monthlyToDate(day: number): string {
+  const today = todayISO();
+  const d = fromISODate(today);
+  const candidate = new Date(d.getFullYear(), d.getMonth(), day);
+  if (candidate < d) candidate.setMonth(candidate.getMonth() + 1);
+  const y = candidate.getFullYear();
+  const m = String(candidate.getMonth() + 1).padStart(2, '0');
+  const dd = String(candidate.getDate()).padStart(2, '0');
+  return `${y}-${m}-${dd}`;
 }
 
 function describePersistence(status: PersistenceStatus): string {
