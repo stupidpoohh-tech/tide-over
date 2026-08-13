@@ -71,19 +71,6 @@ export function Onboarding({ wasWiped, onStart, onRestoreLink }: Props) {
         <button type="button" className="primary-btn" disabled={amount <= 0} onClick={start}>
           시작하기
         </button>
-        <p className="muted">
-          급여일은 '급여'라는 예정 입금으로 저장됩니다. 머리 숫자는 다음 입금 전날까지로
-          계산됩니다.
-        </p>
-      </section>
-
-      <section className="card card--quiet">
-        <h2 className="card__title">이 앱이 하는 일</h2>
-        <p>
-          과거 지출은 입력하지 않습니다. 통장 잔고를 옮겨 적는 순간 그 사이의 변동 지출이 전부
-          정산된 것으로 봅니다. 달력에는 오늘 이후의 예정 입금·출금만 있고, 보여주는 숫자는 예상
-          잔고가 아니라 <b>이 날까지 쓸 수 있는 한도</b>입니다.
-        </p>
       </section>
     </div>
   );

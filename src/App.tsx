@@ -71,7 +71,6 @@ export default function App() {
             persistence={store.persistence}
             canStore={store.canStore}
             backupTakenAt={store.backupTakenAt}
-            onSave={store.setState}
             onBackupTaken={store.noteBackupTaken}
             onRestoreLink={store.offerRestore}
             onReset={store.reset}

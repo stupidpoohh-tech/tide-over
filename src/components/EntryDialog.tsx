@@ -9,7 +9,16 @@ import {
   todayISO,
   toISODate,
 } from '../lib/date';
-import { type Entry, type EntryKind, type Schedule, newId } from '../lib/types';
+import {
+  type Entry,
+  type EntryKind,
+  type Schedule,
+  type SpanColor,
+  SPAN_COLORS,
+  SPAN_COLOR_LABEL,
+  newId,
+  spanColorOf,
+} from '../lib/types';
 import { Modal, ModalHeader } from './Modal';
 import { MoneyInput } from './MoneyInput';
 
@@ -27,6 +36,8 @@ type Repeat = Schedule['type'];
 type Props = {
   day?: DayContext;
   today: ISODate;
+  /** 새로 만들 때 날짜 칸의 기본값. */
+  defaultDate?: ISODate;
   /** 있으면 수정 모드 — 폼이 이 항목으로 채워진다. */
   initial?: Entry;
   onAdd?: (entry: Entry) => void;
@@ -37,7 +48,17 @@ type Props = {
   onClose: () => void;
 };
 
-export function EntryDialog({ day, today, initial, onAdd, onUpdate, onRemove, onEdit, onClose }: Props) {
+export function EntryDialog({
+  day,
+  today,
+  defaultDate,
+  initial,
+  onAdd,
+  onUpdate,
+  onRemove,
+  onEdit,
+  onClose,
+}: Props) {
   const titleId = useId();
 
   const [kind, setKind] = useState<EntryKind>(initial?.kind ?? 'expense');
@@ -49,10 +70,15 @@ export function EntryDialog({ day, today, initial, onAdd, onUpdate, onRemove, on
   );
   const [date, setDate] = useState<ISODate>(() => {
     if (initial) return startDateOf(initial.schedule);
-    return day?.date ?? addDays(today, 1);
+    return defaultDate ?? day?.date ?? addDays(today, 1);
   });
   const [spanEnd, setSpanEnd] = useState<ISODate>(() =>
-    initial?.schedule.type === 'span' ? initial.schedule.end : addDays(day?.date ?? today, 7),
+    initial?.schedule.type === 'span'
+      ? initial.schedule.end
+      : addDays(defaultDate ?? day?.date ?? today, 7),
+  );
+  const [color, setColor] = useState<SpanColor>(() =>
+    initial ? spanColorOf(initial) : 'rose',
   );
 
   /** 오늘까지의 날짜는 잔고가 말해주는 구간이라 폼을 열지 않는다. */
@@ -79,7 +105,14 @@ export function EntryDialog({ day, today, initial, onAdd, onUpdate, onRemove, on
           : repeat === 'span'
             ? { type: 'span', start: date, end: spanEnd }
             : { type: 'once', date };
-    const entry: Entry = { id: initial?.id ?? newId(), name: name.trim(), amount, kind, schedule };
+    const entry: Entry = {
+      id: initial?.id ?? newId(),
+      name: name.trim(),
+      amount,
+      kind,
+      schedule,
+      ...(repeat === 'span' ? { color } : {}),
+    };
     if (initial) onUpdate?.(entry);
     else onAdd?.(entry);
     onClose();
@@ -245,11 +278,19 @@ export function EntryDialog({ day, today, initial, onAdd, onUpdate, onRemove, on
                 />
               </div>
               <div className="dialog-row">
-                <span className="dialog-row__label" aria-hidden="true" />
-                <span className="dialog-hint">
-                  기간 전체 예산(생활비)입니다. 달력에 한 줄로 표시되고, 한도에는 하루 단위로
-                  나눠 반영돼 마지막 날이 지나면 정확히 총액만큼 빠집니다.
-                </span>
+                <span className="dialog-row__label">색</span>
+                <div className="chips">
+                  {SPAN_COLORS.map((c) => (
+                    <button
+                      key={c}
+                      type="button"
+                      className={`swatch swatch--${c} ${color === c ? 'is-active' : ''}`}
+                      aria-pressed={color === c}
+                      aria-label={SPAN_COLOR_LABEL[c]}
+                      onClick={() => setColor(c)}
+                    />
+                  ))}
+                </div>
               </div>
             </>
           )}

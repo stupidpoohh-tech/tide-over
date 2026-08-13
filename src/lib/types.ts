@@ -18,6 +18,18 @@ export type Schedule =
   | { type: 'every'; days: number; anchor: ISODate }
   | { type: 'span'; start: ISODate; end: ISODate };
 
+/** 기간 막대에 쓰는 색. 여러 기간을 눈으로 구분하려고 사용자가 고른다. */
+export const SPAN_COLORS = ['rose', 'amber', 'violet', 'teal', 'slate'] as const;
+export type SpanColor = (typeof SPAN_COLORS)[number];
+
+export const SPAN_COLOR_LABEL: Record<SpanColor, string> = {
+  rose: '빨강',
+  amber: '주황',
+  violet: '보라',
+  teal: '청록',
+  slate: '회색',
+};
+
 /** 예정된 입금 또는 출금 한 건. */
 export type Entry = {
   id: string;
@@ -26,6 +38,8 @@ export type Entry = {
   amount: number;
   kind: EntryKind;
   schedule: Schedule;
+  /** 기간(span)에서만 쓴다. 없으면 기본색. */
+  color?: SpanColor;
 };
 
 export type Balance = {
@@ -81,7 +95,8 @@ function isEntry(value: unknown): value is Entry {
     typeof e.amount === 'number' &&
     Number.isFinite(e.amount) &&
     (e.kind === 'income' || e.kind === 'expense') &&
-    isSchedule(e.schedule)
+    isSchedule(e.schedule) &&
+    (e.color === undefined || SPAN_COLORS.includes(e.color as SpanColor))
   );
 }
 
@@ -118,6 +133,11 @@ export function newId(): string {
     return crypto.randomUUID();
   }
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
+/** 기간 막대에 실제로 쓸 색. 안 골랐으면 방향에 맞는 기본색. */
+export function spanColorOf(entry: Entry): SpanColor {
+  return entry.color ?? (entry.kind === 'income' ? 'teal' : 'rose');
 }
 
 export function describeSchedule(schedule: Schedule): string {
