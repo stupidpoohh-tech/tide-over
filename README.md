@@ -143,7 +143,9 @@ playwright를 쓰지 않는 이유는 개발 환경 프록시에서 설치가 �
 서빙은 `tools/serve.mjs`가 **배포와 같은 CSP 헤더**를 얹어서 하므로, 외부 리소스를
 잘못 넣어 CSP에 걸리는 것도 여기서 잡힌다.
 
-작업 지침과 깨면 안 되는 불변식은 [`CLAUDE.md`](./CLAUDE.md)에 있다.
+작업 지침과 깨면 안 되는 불변식은 [`CLAUDE.md`](./CLAUDE.md)에 있다 (세션 시작 시 자동으로
+읽힌다). [`CLAUDE.global.md`](./CLAUDE.global.md)는 프로젝트와 무관한 작업 습관을 모은
+것으로, 자동으로 읽히지 않는다 — 쓰려면 `~/.claude/CLAUDE.md`로 복사한다.
 
 ## 배포
 
