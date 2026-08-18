@@ -26,7 +26,7 @@ import {
   toISODate,
 } from '../lib/date';
 import { type Entry, type State, spanColorOf } from '../lib/types';
-import { EntryDialog } from './EntryDialog';
+import { type DayContext, EntryDialog } from './EntryDialog';
 import { SettleDialog } from './SettleDialog';
 
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
@@ -46,10 +46,10 @@ export function CalendarScreen({ state, today, onSave }: Props) {
     year: todayDate.getFullYear(),
     month0: todayDate.getMonth(),
   }));
+  /** 고른 날짜 = 열려 있는 팝업. 셀을 누르면 곧바로 이 팝업이 뜬다. */
   const [selected, setSelected] = useState<ISODate | null>(null);
   const [editingBalance, setEditingBalance] = useState(false);
   const [editingEntry, setEditingEntry] = useState<Entry | null>(null);
-  const [addingOn, setAddingOn] = useState<ISODate | null>(null);
 
   const horizon = useMemo(() => horizonOf(state.entries, today), [state.entries, today]);
   const headline = useMemo(() => headlineLimit(state, today), [state, today]);
@@ -66,9 +66,19 @@ export function CalendarScreen({ state, today, onSave }: Props) {
   const viewingThisMonth =
     month.year === todayDate.getFullYear() && month.month0 === todayDate.getMonth();
 
-  const selectedItems = useMemo(
-    () => (selected ? entriesOn(state.entries, selected) : []),
-    [selected, state.entries],
+  // 보고 있는 달과 무관하게 계산한다 — 팝업이 열린 채 달을 넘겨도 내용이 흔들리지 않는다.
+  const selectedDay = useMemo<DayContext | null>(
+    () =>
+      selected
+        ? {
+            date: selected,
+            limit: limitOn(state, selected, today),
+            items: entriesOn(state.entries, selected),
+            isPast: compareDate(selected, today) < 0,
+            isToday: selected === today,
+          }
+        : null,
+    [selected, state, today],
   );
 
   const step = (n: number) => setMonth((m) => addMonths(m.year, m.month0, n));
@@ -92,7 +102,7 @@ export function CalendarScreen({ state, today, onSave }: Props) {
       const d = fromISODate(cell.date);
       setMonth({ year: d.getFullYear(), month0: d.getMonth() });
     }
-    setSelected((s) => (s === cell.date ? null : cell.date));
+    setSelected(cell.date);
   }
 
   return (
@@ -104,12 +114,13 @@ export function CalendarScreen({ state, today, onSave }: Props) {
               ? `다음 입금(${formatShortDate(horizon.nextIncome)}) 전날까지`
               : '앞으로 30일'}
           </p>
-          {/* 달력에서 날짜를 고르지 않고도 바로 만들 수 있는 입구. */}
+          {/* 달력에서 날짜를 고르지 않고도 바로 만들 수 있는 입구.
+              셀을 누른 것과 같은 팝업을 열어 만드는 경로를 하나로 유지한다. */}
           <button
             type="button"
             className="add-btn"
             aria-label="예정 추가"
-            onClick={() => setAddingOn(selected ?? addDays(today, 1))}
+            onClick={() => setSelected(addDays(today, 1))}
           >
             +
           </button>
@@ -262,111 +273,50 @@ export function CalendarScreen({ state, today, onSave }: Props) {
         </div>
       </section>
 
-      {selected ? (
-        <section className="card">
-          <header className="daylist__head">
-            <h2 className="card__title">{formatDate(selected)}</h2>
-            <button
-              type="button"
-              className="icon-btn"
-              aria-label="선택 해제"
-              onClick={() => setSelected(null)}
-            >
-              ×
-            </button>
-          </header>
+      <section className="card">
+        <h2 className="card__title">
+          {horizon.nextIncome ? '다음 입금 전날까지 남은 예정' : '앞으로 30일 예정'}
+        </h2>
+        {upcoming.length === 0 ? (
+          <p className="muted">이 구간에 예정된 입금·출금이 없습니다.</p>
+        ) : (
+          <ul className="list">
+            {summarize(upcoming).map((g) => (
+              <li key={g.key}>
+                <button
+                  type="button"
+                  className="list__row"
+                  onClick={() => setEditingEntry(g.entry)}
+                >
+                  <span className="list__date">
+                    {g.from === g.to
+                      ? formatShortDate(g.from)
+                      : `${formatShortDate(g.from)}~${formatShortDate(g.to)}`}
+                  </span>
+                  <span className="list__name">{g.entry.name}</span>
+                  <span className={`list__amount ${g.entry.kind === 'income' ? 'is-income' : ''}`}>
+                    {g.entry.kind === 'income' ? '+' : '−'}
+                    {formatWon(g.amount)}
+                  </span>
+                  <span className="list__after">→ {formatWon(limitOn(state, g.to, today))}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </section>
 
-          {selectedItems.length === 0 ? (
-            <p className="muted">이 날 예정된 입금·출금이 없습니다.</p>
-          ) : (
-            <ul className="list list--day">
-              {selectedItems.map((o) => (
-                <li key={o.entry.id}>
-                  <button
-                    type="button"
-                    className="list__row"
-                    onClick={() => setEditingEntry(o.entry)}
-                  >
-                    <span
-                      className={`ecard__dot ${o.entry.kind === 'income' ? 'is-income' : 'is-expense'}`}
-                      aria-hidden="true"
-                    />
-                    <span className="list__name">
-                      {o.entry.name}
-                      {o.entry.schedule.type === 'monthly' && <em className="tag">매달</em>}
-                      {o.entry.schedule.type === 'every' && (
-                        <em className="tag">{o.entry.schedule.days}일마다</em>
-                      )}
-                      {o.entry.schedule.type === 'span' && <em className="tag">기간</em>}
-                    </span>
-                    <span className={`list__amount ${o.entry.kind === 'income' ? 'is-income' : ''}`}>
-                      {o.entry.kind === 'income' ? '+' : '−'}
-                      {formatWon(o.entry.schedule.type === 'span' ? o.entry.amount : o.amount)}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {compareDate(selected, today) > 0 ? (
-            <button
-              type="button"
-              className="ghost-btn ghost-btn--block"
-              onClick={() => setAddingOn(selected)}
-            >
-              + 이 날에 추가
-            </button>
-          ) : (
-            <p className="muted">
-              {compareDate(selected, today) < 0
-                ? '오늘 이전입니다. 지난 일은 통장 잔고가 말해줍니다.'
-                : '오늘까지는 통장 잔고가 말해줍니다. 예정은 내일 날짜부터 넣을 수 있습니다.'}
-            </p>
-          )}
-        </section>
-      ) : (
-        <section className="card">
-          <h2 className="card__title">
-            {horizon.nextIncome ? '다음 입금 전날까지 남은 예정' : '앞으로 30일 예정'}
-          </h2>
-          {upcoming.length === 0 ? (
-            <p className="muted">이 구간에 예정된 입금·출금이 없습니다.</p>
-          ) : (
-            <ul className="list">
-              {summarize(upcoming).map((g) => (
-                <li key={g.key}>
-                  <button
-                    type="button"
-                    className="list__row list__row--wide"
-                    onClick={() => setEditingEntry(g.entry)}
-                  >
-                    <span className="list__date">
-                      {g.from === g.to
-                        ? formatShortDate(g.from)
-                        : `${formatShortDate(g.from)}~${formatShortDate(g.to)}`}
-                    </span>
-                    <span className="list__name">{g.entry.name}</span>
-                    <span className={`list__amount ${g.entry.kind === 'income' ? 'is-income' : ''}`}>
-                      {g.entry.kind === 'income' ? '+' : '−'}
-                      {formatWon(g.amount)}
-                    </span>
-                    <span className="list__after">→ {formatWon(limitOn(state, g.to, today))}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </section>
-      )}
-
-      {addingOn && (
+      {selectedDay && (
         <EntryDialog
+          day={selectedDay}
           today={today}
-          defaultDate={addingOn}
           onAdd={addEntry}
           onRemove={removeEntry}
-          onClose={() => setAddingOn(null)}
+          onEdit={(entry) => {
+            setSelected(null);
+            setEditingEntry(entry);
+          }}
+          onClose={() => setSelected(null)}
         />
       )}
 

@@ -482,14 +482,6 @@ body {
 
 
 
-.ghost-btn--block {
-  display: block;
-  width: 100%;
-  margin-top: 10px;
-  padding: 9px 14px;
-  font-size: 14px;
-}
-
 .tag {
   margin-left: 5px;
   padding: 1px 5px;
@@ -1175,92 +1167,6 @@ input[type='date'] {
 
 }
 
-/* --- 기간 예산(생활비) 막대 --- */
-
-.day__bars {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  margin-top: 2px;
-}
-
-
-
-
-
-.allow--start {
-  margin-left: 0;
-  border-top-left-radius: 7px;
-  border-bottom-left-radius: 7px;
-}
-
-.allow--end {
-  margin-right: 0;
-  border-top-right-radius: 7px;
-  border-bottom-right-radius: 7px;
-}
-
-
-
-
-
-/* --- 설정: 날짜별 카드 목록 --- */
-
-
-
-
-
-
-
-
-
-.ecard__dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.ecard__dot.is-income {
-  background: var(--ok);
-}
-
-.ecard__dot.is-expense {
-  background: var(--danger);
-}
-
-
-
-
-
-
-
-
-
-
-
-.ghost-btn--danger {
-  border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
-  color: var(--danger);
-}
-
-.modal__delete {
-  margin-right: auto;
-}
-
-.dialog-items__name {
-  padding: 0;
-  border: 0;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
-.dialog-items__name:disabled {
-  cursor: default;
-}
 
 /* 앞뒤 달 날짜 — 빈칸 대신 흐리게 이어 보여준다. */
 .day--outside {
@@ -1271,21 +1177,10 @@ input[type='date'] {
   opacity: 0.22;
 }
 
-.daylist__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  margin-bottom: 8px;
-}
-
-.daylist__head .card__title {
-  margin: 0;
-}
-
 .list__row {
   display: grid;
-  grid-template-columns: 8px 1fr auto;
+  grid-template-columns: minmax(46px, auto) 1fr auto;
+  grid-template-areas: 'date name amount' '. after after';
   align-items: center;
   gap: 8px;
   width: 100%;
@@ -1298,29 +1193,20 @@ input[type='date'] {
   cursor: pointer;
 }
 
-.list__row--wide {
-  grid-template-columns: minmax(46px, auto) 1fr auto;
-  grid-template-areas: 'date name amount' '. after after';
-}
-
-.list__row--wide .list__date {
+.list__row .list__date {
   grid-area: date;
 }
 
-.list__row--wide .list__name {
+.list__row .list__name {
   grid-area: name;
 }
 
-.list__row--wide .list__amount {
+.list__row .list__amount {
   grid-area: amount;
 }
 
-.list__row--wide .list__after {
+.list__row .list__after {
   grid-area: after;
-}
-
-.list--day li {
-  grid-template-columns: 1fr;
 }
 
 /* --- 기간 예산 막대 --- */
@@ -1417,21 +1303,6 @@ input[type='date'] {
   border-color: var(--allow-fg);
 }
 
-.ecard__dot {
-  flex: none;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-}
-
-.ecard__dot.is-income {
-  background: var(--ok);
-}
-
-.ecard__dot.is-expense {
-  background: var(--danger);
-}
-
 .ghost-btn--danger {
   border-color: color-mix(in srgb, var(--danger) 45%, var(--line));
   color: var(--danger);
@@ -1449,6 +1320,10 @@ input[type='date'] {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.dialog-items__name:disabled {
+  cursor: default;
 }
 
 /* --- 형제 서비스 안내 --- */

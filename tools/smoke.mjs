@@ -50,14 +50,15 @@ check(
   '기간 막대는 총액 라벨을 고정으로 쓴다',
   (await evaluate(`__all('.allow__label').map((l) => l.innerText).join(',')`)).includes('생활비 10만'),
 );
-// 기간만 남긴 상태로 본다. 다른 예정이 섞여 있으면 그것 때문에 한도가 바뀌므로,
+// 기간 하나만 남긴 상태로 본다. 다른 예정이 섞이면 그것 때문에 한도가 바뀌므로,
 // "기간이 매일 깎지 않는다"는 불변식만 따로 떼어 확인해야 한다.
+// 급여(매달 25일)도 빼야 한다 — 오늘이 며칠이냐에 따라 기간 한가운데로 들어와
+// 한도를 300만 올려버린다. 앱이 맞고 테스트가 틀리는 쪽이라 격리를 더 좁혔다.
 await evaluate(`
   window.__rich = localStorage.getItem('tideover.state');
   localStorage.setItem('tideover.state', JSON.stringify({
     balance: { amount: 800000, checkedAt: new Date().toISOString() },
     entries: [
-      { id:'p', name:'급여', amount:3000000, kind:'income', schedule:{ type:'monthly', day:25 } },
       { id:'s', name:'생활비', amount:100000, kind:'expense', color:'violet',
         schedule:{ type:'span', start:'${d.spanStart}', end:'${d.spanEnd}' } },
     ],
@@ -100,14 +101,17 @@ check(
   `),
 );
 
-/* ---------- 날짜를 누르면 아래 내역 리스트 ---------- */
-await evaluate(`__futureCell(1).click()`);
+/* ---------- 날짜를 누르면 곧바로 추가 팝업 ---------- */
+const cellDate = await evaluate(`
+  (() => { const c = __futureCell(1); c.click(); return c.getAttribute('aria-label'); })()
+`);
 await sleep(350);
-check('셀을 누르면 팝업이 아니라 아래 카드', (await evaluate(`!!__q('.daylist__head')`)));
-check('추가 버튼이 있다', await evaluate(`!!__byText('button', '+ 이 날에 추가')`));
-
-await evaluate(`__byText('button', '+ 이 날에 추가').click()`);
-await sleep(300);
+check('셀을 누르면 곧바로 팝업이 뜬다', await evaluate(`!!__q('.modal .dialog-form')`));
+check(
+  '팝업이 그 날짜로 열린다',
+  cellDate.startsWith(await evaluate(`__text('.modal__badge')`)),
+  `${cellDate} / ${await evaluate(`__text('.modal__badge')`)}`,
+);
 check('반복이 네 가지다', (await evaluate(`__all('.chips .chip').length`)) >= 6);
 await evaluate(`__fill('금액', '12000')`);
 await evaluate(`__fill('내용', '스모크')`);
@@ -117,15 +121,17 @@ await sleep(400);
 check('추가하면 저장된다', await evaluate(`__state().entries.some((e) => e.name === '스모크')`));
 check('추가 후 팝업이 닫힌다', (await evaluate(`!!__q('.modal')`)) === false);
 
-await evaluate(`__byText('.list--day .list__row', '스모크').click()`);
+// 같은 셀을 다시 열면 방금 넣은 것이 그 안에 보이고, 눌러서 수정으로 넘어간다.
+await evaluate(`__futureCell(1).click()`);
+await sleep(350);
+check('팝업 안에 그 날 내역이 보인다', await evaluate(`!!__byText('.dialog-items__name', '스모크')`));
+await evaluate(`__byText('.dialog-items__name', '스모크').click()`);
 await sleep(350);
 check('항목을 누르면 수정 팝업', (await evaluate(`__text('.modal__title')`)).includes('수정'));
 await key('Escape');
 check('Esc로 닫힌다', (await evaluate(`!!__q('.modal')`)) === false);
 
 /* ---------- 머리 카드의 + 와 잔고 편집 ---------- */
-await evaluate(`__q('.daylist__head .icon-btn').click()`);
-await sleep(250);
 await evaluate(`__q('.add-btn').click()`);
 await sleep(350);
 check('+ 버튼이 추가 팝업을 연다', (await evaluate(`__text('.modal__title')`)).includes('새로 만들기'));
