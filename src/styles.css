@@ -1072,15 +1072,6 @@ input[type='date'] {
   text-align: center;
 }
 
-.dialog-warn {
-  margin: 0;
-  padding: 9px 12px;
-  border-radius: 9px;
-  background: var(--warn-soft);
-  border: 1px solid var(--warn-line);
-  font-size: 13px;
-}
-
 .solid-btn {
   padding: 11px 20px;
   border: 1px solid var(--text);

@@ -145,14 +145,15 @@ check('항목을 누르면 수정 팝업', (await evaluate(`__text('.modal__titl
 await key('Escape');
 check('Esc로 닫힌다', (await evaluate(`!!__q('.modal')`)) === false);
 
-/* ---------- 지난 날짜도 고칠 수 있다 ---------- */
-await evaluate(`
+/* ---------- 지난 날짜도 고치고 새로 만들 수 있다 ---------- */
+const pastISO = await evaluate(`
   (() => {
     const s = __state();
     const past = new Date(); past.setDate(past.getDate() - 3);
     const iso = past.getFullYear()+'-'+String(past.getMonth()+1).padStart(2,'0')+'-'+String(past.getDate()).padStart(2,'0');
     s.entries.push({ id:'past', name:'지난기록', amount:20000, kind:'expense', schedule:{ type:'once', date: iso } });
     localStorage.setItem('tideover.state', JSON.stringify(s));
+    return iso;
   })()
 `);
 await goto(BASE);
@@ -170,6 +171,21 @@ check(
   '지난 기록의 금액도 고쳐진다',
   (await evaluate(`__state().entries.find((e) => e.name === '지난기록')?.amount`)) === 25000,
 );
+// 지난 날짜로 새로 만들 수 있다. 다만 한도(오늘 이후만 더한다)는 흔들리지 않아야 한다.
+const headBefore = await evaluate(`__text('.headline__amount')`);
+check('지난 날 폼의 날짜는 그 날짜다', (await evaluate(`__field('날짜').value`)) === pastISO, pastISO);
+await evaluate(`__fill('금액', '30000')`);
+await evaluate(`__fill('내용', '지난추가')`);
+await sleep(200);
+check('지난 날짜여도 추가 버튼이 살아 있다', (await evaluate(`__q('.dialog-form button[type=submit]').disabled`)) === false);
+await evaluate(`__q('.dialog-form button[type=submit]').click()`);
+await sleep(400);
+check('지난 날짜로 새로 만들어진다', await evaluate(`__state().entries.some((e) => e.name === '지난추가')`));
+check('지난 날짜를 넣어도 머리 숫자는 그대로다', (await evaluate(`__text('.headline__amount')`)) === headBefore);
+check('타이르는 경고문이 없다', (await evaluate(`!!__q('.dialog-warn')`)) === false);
+
+await evaluate(`__byText('.day--past:not(.day--outside)', '지난기록').click()`);
+await sleep(350);
 await evaluate(`__byText('.dialog-items__name', '지난기록').click()`);
 await sleep(350);
 check('지난 기록도 수정 팝업이 열린다', (await evaluate(`__text('.modal__title')`)).includes('수정'));

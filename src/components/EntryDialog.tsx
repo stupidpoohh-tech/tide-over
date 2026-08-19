@@ -58,12 +58,8 @@ export function EntryDialog({
 
   /** 지난 날은 잔고가 이미 말해준 구간이라 "이 날까지의 한도"가 뜻을 갖지 않는다. */
   const dayIsPast = Boolean(day && compareDate(day.date, today) < 0);
-  /**
-   * 새로 만들 날짜의 기본값. 지난 날·오늘 셀에서 열었어도 만들 수 있는 가장 이른
-   * 날로 맞춘다 — 그 날의 기록은 위 목록에서 고치고, 새로 만드는 건 내일부터다.
-   */
-  const createDate =
-    day && compareDate(day.date, today) > 0 ? day.date : addDays(today, 1);
+  /** 셀에서 열었으면 그 날짜로 시작한다. 지난 날짜여도 그대로 쓴다. */
+  const createDate = day?.date ?? addDays(today, 1);
 
   const [kind, setKind] = useState<EntryKind>(initial?.kind ?? 'expense');
   const [name, setName] = useState(initial?.name ?? '');
@@ -82,14 +78,10 @@ export function EntryDialog({
   /** 목록에서 금액만 그 자리에서 고치는 중인 항목. */
   const [tweaking, setTweaking] = useState<{ id: string; amount: number } | null>(null);
 
-  /**
-   * 새로 넣는 한 번짜리만 미래 날짜를 요구한다. 반복·기간은 시작이 과거여도
-   * 앞으로의 발생분이 잡히고, 기존 항목 수정은 과거 날짜 그대로 저장할 수 있다.
-   */
-  const dateTooEarly = !initial && repeat === 'once' && date !== '' && compareDate(date, today) <= 0;
+  // 날짜에 하한을 두지 않는다. 지난 날짜 항목은 한도(오늘, d]에 애초에 안 들어가서
+  // 계산을 흔들지 않고, 잘못 적은 과거를 남겨두는 것보다 적을 수 있는 편이 낫다.
   const spanBroken = repeat === 'span' && (spanEnd === '' || compareDate(date, spanEnd) > 0);
-  const canSubmit =
-    name.trim().length > 0 && amount > 0 && date !== '' && !dateTooEarly && !spanBroken;
+  const canSubmit = name.trim().length > 0 && amount > 0 && date !== '' && !spanBroken;
 
   const dayOfMonth = date === '' ? 1 : fromISODate(date).getDate();
 
@@ -221,12 +213,7 @@ export function EntryDialog({
 
         <label className="dialog-row">
           <span className="dialog-row__label">{repeat === 'span' ? '시작' : '날짜'}</span>
-          <input
-            type="date"
-            value={date}
-            min={!initial && repeat === 'once' ? addDays(today, 1) : undefined}
-            onChange={(e) => setDate(e.target.value)}
-          />
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </label>
 
         <div className="dialog-row">
@@ -307,12 +294,6 @@ export function EntryDialog({
             onChange={(e) => setName(e.target.value)}
           />
         </label>
-
-        {dateTooEarly && (
-          <p className="dialog-warn">
-            오늘까지는 통장 잔고가 말해줍니다. 한 번짜리 예정은 내일 날짜부터 넣을 수 있습니다.
-          </p>
-        )}
 
         <div className="modal__actions">
           {initial && (

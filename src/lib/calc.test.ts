@@ -260,6 +260,18 @@ describe('limitOn', () => {
     expect(limitOn(s, '2026-03-01', '2026-03-07')).toBe(1_900_000);
   });
 
+  // 과거 날짜로도 항목을 만들 수 있게 열어둔 근거. 만들 수 있게 한 이상,
+  // 그것이 한도를 흔들지 않는다는 사실을 테스트로 못 박아 둔다.
+  it('지난 날짜·오늘 날짜의 항목은 한도를 바꾸지 않는다', () => {
+    const withPast = state({
+      ...s,
+      entries: [...s.entries, once('p', '관리비', 78_000, '2026-03-05'), once('t', '점심', 9_000, '2026-03-07')],
+    });
+    expect(limitOn(withPast, '2026-03-07', '2026-03-07')).toBe(limitOn(s, '2026-03-07', '2026-03-07'));
+    expect(limitOn(withPast, '2026-03-20', '2026-03-07')).toBe(limitOn(s, '2026-03-20', '2026-03-07'));
+    expect(headlineLimit(withPast, '2026-03-07')).toBe(headlineLimit(s, '2026-03-07'));
+  });
+
   it('오늘 이후의 예정 출금만 빠진다', () => {
     expect(limitOn(s, '2026-03-10', '2026-03-07')).toBe(1_300_000);
     expect(limitOn(s, '2026-03-19', '2026-03-07')).toBe(1_300_000);
