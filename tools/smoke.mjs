@@ -217,6 +217,10 @@ await evaluate(`__byText('.tab', '설정').click()`);
 await sleep(300);
 check('설정에 항목 나열이 없다', (await evaluate(`!!__q('.entry-cards') || !!__q('.ecard')`)) === false);
 check('서비스 더보기 링크가 있다', (await evaluate(`__q('.promo')?.href`)) === 'https://loan-early.vercel.app/');
+check(
+  '만든 사람 링크가 하단에 있다',
+  (await evaluate(`__q('.app-footer a')?.href`)) === 'https://dada-portfolio.stupidpoohh.workers.dev/',
+);
 
 await evaluate(`__byText('button', '백업 링크 복사').click()`);
 await sleep(400);

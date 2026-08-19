@@ -94,7 +94,32 @@ export default function App() {
           {store.toast}
         </div>
       )}
+
+      <footer className="app-footer">
+        <span>제작자 DADA</span>
+        <a
+          className="icon-btn"
+          href={CREATOR_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="만든 사람 포트폴리오"
+        >
+          <HomeIcon />
+        </a>
+      </footer>
     </div>
+  );
+}
+
+const CREATOR_URL = 'https://dada-portfolio.stupidpoohh.workers.dev/';
+
+/** 집 글리프. 외부 리소스를 쓰지 않으려고 인라인 SVG로 그린다. */
+function HomeIcon() {
+  return (
+    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.8">
+      <path d="M4 11.5 12 4l8 7.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M6 10v9a1 1 0 0 0 1 1h10a1 1 0 0 0 1-1v-9" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
   );
 }
 
