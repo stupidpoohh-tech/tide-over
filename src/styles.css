@@ -1326,6 +1326,51 @@ input[type='date'] {
   cursor: default;
 }
 
+/* 금액은 눌러서 그 자리에서 고친다 — 눌러도 되는 자리로 보이게 밑줄을 둔다. */
+.dialog-items__amount {
+  padding: 1px 2px;
+  border: 0;
+  border-bottom: 1px dashed var(--muted);
+  border-radius: 0;
+  background: none;
+  color: inherit;
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  cursor: pointer;
+}
+
+.dialog-items__amount:disabled {
+  border-bottom-color: transparent;
+  cursor: default;
+}
+
+.amount-tweak {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.amount-tweak .money-input {
+  width: 8.5em;
+}
+
+.amount-tweak .money-input input {
+  width: 100%;
+  padding: 4px 26px 4px 8px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+  color: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: right;
+}
+
+.amount-tweak .money-input__unit {
+  right: 8px;
+  font-size: 12px;
+}
+
 /* --- 형제 서비스 안내 --- */
 
 .promo {

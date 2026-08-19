@@ -74,8 +74,6 @@ export function CalendarScreen({ state, today, onSave }: Props) {
             date: selected,
             limit: limitOn(state, selected, today),
             items: entriesOn(state.entries, selected),
-            isPast: compareDate(selected, today) < 0,
-            isToday: selected === today,
           }
         : null,
     [selected, state, today],
@@ -311,6 +309,7 @@ export function CalendarScreen({ state, today, onSave }: Props) {
           day={selectedDay}
           today={today}
           onAdd={addEntry}
+          onUpdate={updateEntry}
           onRemove={removeEntry}
           onEdit={(entry) => {
             setSelected(null);

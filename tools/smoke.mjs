@@ -125,11 +125,60 @@ check('추가 후 팝업이 닫힌다', (await evaluate(`!!__q('.modal')`)) === 
 await evaluate(`__futureCell(1).click()`);
 await sleep(350);
 check('팝업 안에 그 날 내역이 보인다', await evaluate(`!!__byText('.dialog-items__name', '스모크')`));
+// 금액을 눌러 그 자리에서 고친다 — 수정 팝업까지 가지 않는다.
+await evaluate(`__byText('.dialog-items__amount', '12,000').click()`);
+await sleep(250);
+check('금액을 누르면 그 자리에서 고친다', await evaluate(`!!__q('.amount-tweak input')`));
+await evaluate(`__set(__q('.amount-tweak input'), '9000')`);
+await sleep(150);
+await evaluate(`__q('.amount-tweak .icon-btn').click()`);
+await sleep(350);
+check(
+  '그 자리 수정이 저장된다',
+  (await evaluate(`__state().entries.find((e) => e.name === '스모크')?.amount`)) === 9000,
+);
+check('금액만 고쳐도 팝업은 열려 있다', await evaluate(`!!__q('.modal .dialog-form')`));
+
 await evaluate(`__byText('.dialog-items__name', '스모크').click()`);
 await sleep(350);
 check('항목을 누르면 수정 팝업', (await evaluate(`__text('.modal__title')`)).includes('수정'));
 await key('Escape');
 check('Esc로 닫힌다', (await evaluate(`!!__q('.modal')`)) === false);
+
+/* ---------- 지난 날짜도 고칠 수 있다 ---------- */
+await evaluate(`
+  (() => {
+    const s = __state();
+    const past = new Date(); past.setDate(past.getDate() - 3);
+    const iso = past.getFullYear()+'-'+String(past.getMonth()+1).padStart(2,'0')+'-'+String(past.getDate()).padStart(2,'0');
+    s.entries.push({ id:'past', name:'지난기록', amount:20000, kind:'expense', schedule:{ type:'once', date: iso } });
+    localStorage.setItem('tideover.state', JSON.stringify(s));
+  })()
+`);
+await goto(BASE);
+await evaluate(`__byText('.day--past:not(.day--outside)', '지난기록').click()`);
+await sleep(350);
+check('지난 날도 폼이 열린다 (읽기 전용 안내 없음)', await evaluate(`!!__q('.modal .dialog-form')`));
+check('지난 날 항목도 보인다', await evaluate(`!!__byText('.dialog-items__name', '지난기록')`));
+await evaluate(`__byText('.dialog-items__amount', '20,000').click()`);
+await sleep(250);
+await evaluate(`__set(__q('.amount-tweak input'), '25000')`);
+await sleep(150);
+await evaluate(`__q('.amount-tweak .icon-btn').click()`);
+await sleep(350);
+check(
+  '지난 기록의 금액도 고쳐진다',
+  (await evaluate(`__state().entries.find((e) => e.name === '지난기록')?.amount`)) === 25000,
+);
+await evaluate(`__byText('.dialog-items__name', '지난기록').click()`);
+await sleep(350);
+check('지난 기록도 수정 팝업이 열린다', (await evaluate(`__text('.modal__title')`)).includes('수정'));
+await evaluate(`__byText('.modal button', '삭제').click()`);
+await sleep(350);
+check(
+  '지난 기록을 지울 수 있다',
+  (await evaluate(`__state().entries.some((e) => e.name === '지난기록')`)) === false,
+);
 
 /* ---------- 머리 카드의 + 와 잔고 편집 ---------- */
 await evaluate(`__q('.add-btn').click()`);

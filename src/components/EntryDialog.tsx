@@ -22,13 +22,11 @@ import {
 import { Modal, ModalHeader } from './Modal';
 import { MoneyInput } from './MoneyInput';
 
-/** 달력 셀에서 열렸을 때 그 날의 맥락. 설정에서 열면 없다. */
+/** 달력 셀에서 열렸을 때 그 날의 맥락. */
 export type DayContext = {
   date: ISODate;
   limit: number;
   items: Occurrence[];
-  isPast: boolean;
-  isToday: boolean;
 };
 
 type Repeat = Schedule['type'];
@@ -36,8 +34,6 @@ type Repeat = Schedule['type'];
 type Props = {
   day?: DayContext;
   today: ISODate;
-  /** 새로 만들 때 날짜 칸의 기본값. */
-  defaultDate?: ISODate;
   /** 있으면 수정 모드 — 폼이 이 항목으로 채워진다. */
   initial?: Entry;
   onAdd?: (entry: Entry) => void;
@@ -51,7 +47,6 @@ type Props = {
 export function EntryDialog({
   day,
   today,
-  defaultDate,
   initial,
   onAdd,
   onUpdate,
@@ -61,6 +56,15 @@ export function EntryDialog({
 }: Props) {
   const titleId = useId();
 
+  /** 지난 날은 잔고가 이미 말해준 구간이라 "이 날까지의 한도"가 뜻을 갖지 않는다. */
+  const dayIsPast = Boolean(day && compareDate(day.date, today) < 0);
+  /**
+   * 새로 만들 날짜의 기본값. 지난 날·오늘 셀에서 열었어도 만들 수 있는 가장 이른
+   * 날로 맞춘다 — 그 날의 기록은 위 목록에서 고치고, 새로 만드는 건 내일부터다.
+   */
+  const createDate =
+    day && compareDate(day.date, today) > 0 ? day.date : addDays(today, 1);
+
   const [kind, setKind] = useState<EntryKind>(initial?.kind ?? 'expense');
   const [name, setName] = useState(initial?.name ?? '');
   const [amount, setAmount] = useState(initial?.amount ?? 0);
@@ -68,21 +72,15 @@ export function EntryDialog({
   const [everyDays, setEveryDays] = useState(
     initial?.schedule.type === 'every' ? initial.schedule.days : 7,
   );
-  const [date, setDate] = useState<ISODate>(() => {
-    if (initial) return startDateOf(initial.schedule);
-    return defaultDate ?? day?.date ?? addDays(today, 1);
-  });
+  const [date, setDate] = useState<ISODate>(() =>
+    initial ? startDateOf(initial.schedule) : createDate,
+  );
   const [spanEnd, setSpanEnd] = useState<ISODate>(() =>
-    initial?.schedule.type === 'span'
-      ? initial.schedule.end
-      : addDays(defaultDate ?? day?.date ?? today, 7),
+    initial?.schedule.type === 'span' ? initial.schedule.end : addDays(createDate, 7),
   );
-  const [color, setColor] = useState<SpanColor>(() =>
-    initial ? spanColorOf(initial) : 'rose',
-  );
-
-  /** 오늘까지의 날짜는 잔고가 말해주는 구간이라 폼을 열지 않는다. */
-  const readOnly = Boolean(day && (day.isPast || day.isToday));
+  const [color, setColor] = useState<SpanColor>(() => (initial ? spanColorOf(initial) : 'rose'));
+  /** 목록에서 금액만 그 자리에서 고치는 중인 항목. */
+  const [tweaking, setTweaking] = useState<{ id: string; amount: number } | null>(null);
 
   /**
    * 새로 넣는 한 번짜리만 미래 날짜를 요구한다. 반복·기간은 시작이 과거여도
@@ -123,11 +121,11 @@ export function EntryDialog({
       <ModalHeader
         titleId={titleId}
         badge={day ? formatDate(day.date) : '예정'}
-        title={readOnly ? '이 날의 예정' : initial ? '수정' : '새로 만들기'}
+        title={initial ? '수정' : '새로 만들기'}
         onClose={onClose}
       />
 
-      {day && !day.isPast && (
+      {day && !dayIsPast && (
         <p className="modal__note">
           이 날까지 쓸 수 있는 한도 <b>{formatWon(day.limit)}</b>
         </p>
@@ -151,189 +149,249 @@ export function EntryDialog({
                 {o.entry.schedule.type === 'span' && <em className="tag">기간</em>}
               </button>
               <span className="dialog-items__right">
-                <span className={o.entry.kind === 'income' ? 'is-income' : 'is-expense'}>
-                  {o.entry.kind === 'income' ? '+' : '−'}
-                  {formatWon(o.entry.schedule.type === 'span' ? o.entry.amount : o.amount)}
-                  {o.entry.schedule.type === 'span' && <span className="muted"> 기간 전체</span>}
-                </span>
-                {!readOnly && (
+                {tweaking?.id === o.entry.id ? (
+                  <AmountTweak
+                    kind={o.entry.kind}
+                    amount={tweaking.amount}
+                    onChange={(v) => setTweaking({ id: o.entry.id, amount: v })}
+                    onCommit={() => {
+                      if (tweaking.amount > 0 && tweaking.amount !== o.entry.amount) {
+                        onUpdate?.({ ...o.entry, amount: tweaking.amount });
+                      }
+                      setTweaking(null);
+                    }}
+                    onCancel={() => setTweaking(null)}
+                  />
+                ) : (
                   <button
                     type="button"
-                    className="icon-btn icon-btn--small icon-btn--danger"
-                    aria-label={`${o.entry.name} 삭제`}
-                    onClick={() => onRemove(o.entry.id)}
+                    className={`dialog-items__amount ${o.entry.kind === 'income' ? 'is-income' : 'is-expense'}`}
+                    aria-label={`${o.entry.name} 금액 고치기`}
+                    onClick={() => setTweaking({ id: o.entry.id, amount: o.entry.amount })}
+                    disabled={!onUpdate}
                   >
-                    ×
+                    {o.entry.kind === 'income' ? '+' : '−'}
+                    {formatWon(o.entry.schedule.type === 'span' ? o.entry.amount : o.amount)}
+                    {o.entry.schedule.type === 'span' && <span className="muted"> 기간 전체</span>}
                   </button>
                 )}
+                <button
+                  type="button"
+                  className="icon-btn icon-btn--small icon-btn--danger"
+                  aria-label={`${o.entry.name} 삭제`}
+                  onClick={() => onRemove(o.entry.id)}
+                >
+                  ×
+                </button>
               </span>
             </li>
           ))}
         </ul>
       )}
 
-      {readOnly ? (
-        <>
-          <p className="muted">
-            {day?.isPast
-              ? '오늘 이전입니다. 지난 일은 달력이 아니라 통장 잔고가 말해줍니다.'
-              : '오늘까지는 통장 잔고가 말해줍니다. 예정은 내일 날짜부터 넣을 수 있습니다.'}
-          </p>
-          <div className="modal__actions">
-            <button type="button" className="ghost-btn" onClick={onClose}>
-              닫기
-            </button>
-          </div>
-        </>
-      ) : (
-        <form
-          className="dialog-form"
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit();
-          }}
-        >
-          <div className="dialog-row">
-            <span className="dialog-row__label">유형</span>
-            <div className="chips">
-              <KindChip
-                label="예상 입금"
-                tone="income"
-                active={kind === 'income'}
-                onClick={() => setKind('income')}
-              />
-              <KindChip
-                label="나갈 돈"
-                tone="expense"
-                active={kind === 'expense'}
-                onClick={() => setKind('expense')}
-              />
-            </div>
-          </div>
-
-          <label className="dialog-row">
-            <span className="dialog-row__label">금액</span>
-            <MoneyInput value={amount} onChange={setAmount} placeholder="금액 입력" />
-          </label>
-
-          <label className="dialog-row">
-            <span className="dialog-row__label">{repeat === 'span' ? '시작' : '날짜'}</span>
-            <input
-              type="date"
-              value={date}
-              min={!initial && repeat === 'once' ? addDays(today, 1) : undefined}
-              onChange={(e) => setDate(e.target.value)}
+      <form
+        className="dialog-form"
+        onSubmit={(e) => {
+          e.preventDefault();
+          submit();
+        }}
+      >
+        <div className="dialog-row">
+          <span className="dialog-row__label">유형</span>
+          <div className="chips">
+            <KindChip
+              label="예상 입금"
+              tone="income"
+              active={kind === 'income'}
+              onClick={() => setKind('income')}
             />
-          </label>
-
-          <div className="dialog-row">
-            <span className="dialog-row__label">반복</span>
-            <div className="chips">
-              <RepeatChip active={repeat === 'once'} onClick={() => setRepeat('once')}>
-                한 번
-              </RepeatChip>
-              <RepeatChip active={repeat === 'monthly'} onClick={() => setRepeat('monthly')}>
-                매달 {dayOfMonth}일
-              </RepeatChip>
-              <RepeatChip active={repeat === 'every'} onClick={() => setRepeat('every')}>
-                {repeat === 'every' ? `${everyDays}일마다` : '며칠마다'}
-              </RepeatChip>
-              <RepeatChip active={repeat === 'span'} onClick={() => setRepeat('span')}>
-                기간
-              </RepeatChip>
-            </div>
-          </div>
-
-          {repeat === 'every' && (
-            <div className="dialog-row">
-              <span className="dialog-row__label" aria-hidden="true" />
-              <span className="every-edit">
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  inputMode="numeric"
-                  aria-label="반복 주기"
-                  value={everyDays}
-                  onChange={(e) => {
-                    const n = Number(e.target.value);
-                    if (Number.isInteger(n) && n >= 1 && n <= 365) setEveryDays(n);
-                  }}
-                />
-                <span>일마다 · {date || '날짜'}부터</span>
-              </span>
-            </div>
-          )}
-
-          {repeat === 'span' && (
-            <>
-              <div className="dialog-row">
-                <span className="dialog-row__label">끝</span>
-                <input
-                  type="date"
-                  aria-label="기간 끝"
-                  value={spanEnd}
-                  min={date || undefined}
-                  onChange={(e) => setSpanEnd(e.target.value)}
-                />
-              </div>
-              <div className="dialog-row">
-                <span className="dialog-row__label">색</span>
-                <div className="chips">
-                  {SPAN_COLORS.map((c) => (
-                    <button
-                      key={c}
-                      type="button"
-                      className={`swatch swatch--${c} ${color === c ? 'is-active' : ''}`}
-                      aria-pressed={color === c}
-                      aria-label={SPAN_COLOR_LABEL[c]}
-                      onClick={() => setColor(c)}
-                    />
-                  ))}
-                </div>
-              </div>
-            </>
-          )}
-
-          <label className="dialog-row">
-            <span className="dialog-row__label">내용</span>
-            <input
-              type="text"
-              value={name}
-              placeholder={repeat === 'span' ? '예: 생활비' : '내용을 적어보세요…'}
-              onChange={(e) => setName(e.target.value)}
+            <KindChip
+              label="나갈 돈"
+              tone="expense"
+              active={kind === 'expense'}
+              onClick={() => setKind('expense')}
             />
-          </label>
+          </div>
+        </div>
 
-          {dateTooEarly && (
-            <p className="dialog-warn">
-              오늘까지는 통장 잔고가 말해줍니다. 한 번짜리 예정은 내일 날짜부터 넣을 수 있습니다.
-            </p>
-          )}
+        <label className="dialog-row">
+          <span className="dialog-row__label">금액</span>
+          <MoneyInput value={amount} onChange={setAmount} placeholder="금액 입력" />
+        </label>
 
-          <div className="modal__actions">
-            {initial && (
-              <button
-                type="button"
-                className="ghost-btn ghost-btn--danger modal__delete"
-                onClick={() => {
-                  onRemove(initial.id);
-                  onClose();
+        <label className="dialog-row">
+          <span className="dialog-row__label">{repeat === 'span' ? '시작' : '날짜'}</span>
+          <input
+            type="date"
+            value={date}
+            min={!initial && repeat === 'once' ? addDays(today, 1) : undefined}
+            onChange={(e) => setDate(e.target.value)}
+          />
+        </label>
+
+        <div className="dialog-row">
+          <span className="dialog-row__label">반복</span>
+          <div className="chips">
+            <RepeatChip active={repeat === 'once'} onClick={() => setRepeat('once')}>
+              한 번
+            </RepeatChip>
+            <RepeatChip active={repeat === 'monthly'} onClick={() => setRepeat('monthly')}>
+              매달 {dayOfMonth}일
+            </RepeatChip>
+            <RepeatChip active={repeat === 'every'} onClick={() => setRepeat('every')}>
+              {repeat === 'every' ? `${everyDays}일마다` : '며칠마다'}
+            </RepeatChip>
+            <RepeatChip active={repeat === 'span'} onClick={() => setRepeat('span')}>
+              기간
+            </RepeatChip>
+          </div>
+        </div>
+
+        {repeat === 'every' && (
+          <div className="dialog-row">
+            <span className="dialog-row__label" aria-hidden="true" />
+            <span className="every-edit">
+              <input
+                type="number"
+                min={1}
+                max={365}
+                inputMode="numeric"
+                aria-label="반복 주기"
+                value={everyDays}
+                onChange={(e) => {
+                  const n = Number(e.target.value);
+                  if (Number.isInteger(n) && n >= 1 && n <= 365) setEveryDays(n);
                 }}
-              >
-                삭제
-              </button>
-            )}
-            <button type="button" className="ghost-btn" onClick={onClose}>
-              취소
-            </button>
-            <button type="submit" className="solid-btn" disabled={!canSubmit}>
-              {initial ? '저장' : '추가'}
-            </button>
+              />
+              <span>일마다 · {date || '날짜'}부터</span>
+            </span>
           </div>
-        </form>
-      )}
+        )}
+
+        {repeat === 'span' && (
+          <>
+            <div className="dialog-row">
+              <span className="dialog-row__label">끝</span>
+              <input
+                type="date"
+                aria-label="기간 끝"
+                value={spanEnd}
+                min={date || undefined}
+                onChange={(e) => setSpanEnd(e.target.value)}
+              />
+            </div>
+            <div className="dialog-row">
+              <span className="dialog-row__label">색</span>
+              <div className="chips">
+                {SPAN_COLORS.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={`swatch swatch--${c} ${color === c ? 'is-active' : ''}`}
+                    aria-pressed={color === c}
+                    aria-label={SPAN_COLOR_LABEL[c]}
+                    onClick={() => setColor(c)}
+                  />
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+
+        <label className="dialog-row">
+          <span className="dialog-row__label">내용</span>
+          <input
+            type="text"
+            value={name}
+            placeholder={repeat === 'span' ? '예: 생활비' : '내용을 적어보세요…'}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </label>
+
+        {dateTooEarly && (
+          <p className="dialog-warn">
+            오늘까지는 통장 잔고가 말해줍니다. 한 번짜리 예정은 내일 날짜부터 넣을 수 있습니다.
+          </p>
+        )}
+
+        <div className="modal__actions">
+          {initial && (
+            <button
+              type="button"
+              className="ghost-btn ghost-btn--danger modal__delete"
+              onClick={() => {
+                onRemove(initial.id);
+                onClose();
+              }}
+            >
+              삭제
+            </button>
+          )}
+          <button type="button" className="ghost-btn" onClick={onClose}>
+            취소
+          </button>
+          <button type="submit" className="solid-btn" disabled={!canSubmit}>
+            {initial ? '저장' : '추가'}
+          </button>
+        </div>
+      </form>
     </Modal>
+  );
+}
+
+/**
+ * 목록의 금액을 그 자리에서 고친다.
+ *
+ * 금액만 바꾸는 일이 제일 잦은데 그때마다 수정 팝업을 한 번 더 여는 건 과했다.
+ * 쓰는 곳은 이 목록 하나뿐이고 저장은 위와 같은 onUpdate를 타므로, 만들고 고치는
+ * 경로가 둘로 갈라지지는 않는다.
+ */
+function AmountTweak({
+  kind,
+  amount,
+  onChange,
+  onCommit,
+  onCancel,
+}: {
+  kind: EntryKind;
+  amount: number;
+  onChange: (value: number) => void;
+  onCommit: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <span
+      className="amount-tweak"
+      // 바깥으로 초점이 나가면 그대로 저장한다. ✓를 누른 경우는 초점이 안에 남아 있다.
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) onCommit();
+      }}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          onCommit();
+        }
+        if (e.key === 'Escape') {
+          // Modal도 Esc를 듣는다. 여기서 멈추지 않으면 팝업까지 같이 닫힌다.
+          e.stopPropagation();
+          onCancel();
+        }
+      }}
+    >
+      <span className={kind === 'income' ? 'is-income' : 'is-expense'} aria-hidden="true">
+        {kind === 'income' ? '+' : '−'}
+      </span>
+      <MoneyInput value={amount} onChange={onChange} autoFocus aria-label="금액 고치기" />
+      {/* 브라우저가 버튼에 초점을 주면 위 onBlur가 안 도니 눌렀을 때도 저장한다. */}
+      <button
+        type="button"
+        className="icon-btn icon-btn--small"
+        aria-label="금액 저장"
+        onClick={onCommit}
+      >
+        ✓
+      </button>
+    </span>
   );
 }
 

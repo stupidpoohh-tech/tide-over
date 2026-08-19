@@ -20,6 +20,7 @@ type Props = {
   autoFocus?: boolean;
   placeholder?: string;
   'aria-describedby'?: string;
+  'aria-label'?: string;
 };
 
 export function MoneyInput({
