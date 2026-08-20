@@ -96,7 +96,7 @@ export default function App() {
       )}
 
       <footer className="app-footer">
-        <span>제작자 DADA</span>
+        <span>만든사람 DADA</span>
         <a
           className="icon-btn"
           href={CREATOR_URL}
