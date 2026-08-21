@@ -77,6 +77,8 @@ export function EntryDialog({
   const [color, setColor] = useState<SpanColor>(() => (initial ? spanColorOf(initial) : 'rose'));
   /** 목록에서 금액만 그 자리에서 고치는 중인 항목. */
   const [tweaking, setTweaking] = useState<{ id: string; amount: number } | null>(null);
+  /** ×를 누른 항목. 되돌릴 수 없는 삭제라 한 번 더 받는다(설정의 초기화와 같은 방식). */
+  const [removing, setRemoving] = useState<string | null>(null);
 
   // 날짜에 하한을 두지 않는다. 지난 날짜 항목은 한도(오늘, d]에 애초에 안 들어가서
   // 계산을 흔들지 않고, 잘못 적은 과거를 남겨두는 것보다 적을 수 있는 편이 낫다.
@@ -141,7 +143,27 @@ export function EntryDialog({
                 {o.entry.schedule.type === 'span' && <em className="tag">기간</em>}
               </button>
               <span className="dialog-items__right">
-                {tweaking?.id === o.entry.id ? (
+                {removing === o.entry.id ? (
+                  <>
+                    <button
+                      type="button"
+                      className="tiny-btn tiny-btn--danger"
+                      onClick={() => {
+                        onRemove(o.entry.id);
+                        setRemoving(null);
+                      }}
+                    >
+                      삭제
+                    </button>
+                    <button
+                      type="button"
+                      className="tiny-btn"
+                      onClick={() => setRemoving(null)}
+                    >
+                      취소
+                    </button>
+                  </>
+                ) : tweaking?.id === o.entry.id ? (
                   <AmountTweak
                     kind={o.entry.kind}
                     amount={tweaking.amount}
@@ -167,14 +189,19 @@ export function EntryDialog({
                     {o.entry.schedule.type === 'span' && <span className="muted"> 기간 전체</span>}
                   </button>
                 )}
-                <button
-                  type="button"
-                  className="icon-btn icon-btn--small icon-btn--danger"
-                  aria-label={`${o.entry.name} 삭제`}
-                  onClick={() => onRemove(o.entry.id)}
-                >
-                  ×
-                </button>
+                {removing !== o.entry.id && (
+                  <button
+                    type="button"
+                    className="icon-btn icon-btn--small icon-btn--danger"
+                    aria-label={`${o.entry.name} 삭제`}
+                    onClick={() => {
+                      setTweaking(null);
+                      setRemoving(o.entry.id);
+                    }}
+                  >
+                    ×
+                  </button>
+                )}
               </span>
             </li>
           ))}

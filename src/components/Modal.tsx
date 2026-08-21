@@ -10,6 +10,15 @@ type Props = {
 export function Modal({ titleId, onClose, children }: Props) {
   const ref = useRef<HTMLDivElement>(null);
 
+  /*
+   * onClose를 의존성에 넣으면 안 된다. 부르는 쪽은 대개 인라인 화살표라 부모가
+   * 다시 그릴 때마다 새 함수가 되고, 그러면 이 효과가 통째로 다시 돌아 초점이
+   * 첫 요소(닫기 ×)로 튄다. 팝업 안에서 뭔가 저장할 때마다 초점을 빼앗겼다.
+   * 최신 onClose는 ref로 읽고, 효과는 열고 닫을 때 한 번씩만 돈다.
+   */
+  const closeRef = useRef(onClose);
+  closeRef.current = onClose;
+
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
     ref.current
@@ -17,7 +26,7 @@ export function Modal({ titleId, onClose, children }: Props) {
       ?.focus();
 
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') closeRef.current();
     };
     window.addEventListener('keydown', onKey);
 
@@ -29,7 +38,7 @@ export function Modal({ titleId, onClose, children }: Props) {
       document.body.style.overflow = bodyOverflow;
       previous?.focus();
     };
-  }, [onClose]);
+  }, []);
 
   return (
     <div

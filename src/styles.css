@@ -1355,6 +1355,26 @@ input[type='date'] {
   cursor: default;
 }
 
+/* 목록 줄 안에서 두 번째 확인을 받을 때 쓰는 작은 버튼. */
+.tiny-btn {
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.tiny-btn--danger {
+  border-color: var(--danger);
+  background: var(--danger);
+  color: #fff;
+}
+
 .amount-tweak {
   display: flex;
   align-items: center;

@@ -182,10 +182,41 @@ await evaluate(`__q('.dialog-form button[type=submit]').click()`);
 await sleep(400);
 check('지난 날짜로 새로 만들어진다', await evaluate(`__state().entries.some((e) => e.name === '지난추가')`));
 check('지난 날짜를 넣어도 머리 숫자는 그대로다', (await evaluate(`__text('.headline__amount')`)) === headBefore);
-check('타이르는 경고문이 없다', (await evaluate(`!!__q('.dialog-warn')`)) === false);
 
+/* ---------- 목록의 × 는 그 자리에서 한 번 더 확인받는다 ---------- */
 await evaluate(`__byText('.day--past:not(.day--outside)', '지난기록').click()`);
 await sleep(350);
+const killBtn = `__byText('.dialog-items li', '지난추가').querySelector('.icon-btn--danger')`;
+await evaluate(`${killBtn}.click()`);
+await sleep(250);
+check('×를 눌러도 바로 지워지지 않는다', await evaluate(`__state().entries.some((e) => e.name === '지난추가')`));
+check('그 자리에서 확인을 받는다', await evaluate(`!!__byText('.dialog-items .tiny-btn', '삭제')`));
+await evaluate(`__byText('.dialog-items .tiny-btn', '취소').click()`);
+await sleep(250);
+check('취소하면 그대로 남는다', await evaluate(`__state().entries.some((e) => e.name === '지난추가')`));
+await evaluate(`${killBtn}.click()`);
+await sleep(250);
+await evaluate(`__byText('.dialog-items .tiny-btn', '삭제').click()`);
+await sleep(400);
+check(
+  '한 번 더 누르면 지워진다',
+  (await evaluate(`__state().entries.some((e) => e.name === '지난추가')`)) === false,
+);
+
+/* ---------- 팝업 안에서 저장해도 초점을 빼앗기지 않는다 ---------- */
+await evaluate(`__field('내용').focus()`);
+await evaluate(`__byText('.dialog-items__amount', '25,000').click()`);
+await sleep(250);
+await evaluate(`__set(__q('.amount-tweak input'), '26000')`);
+await sleep(150);
+await evaluate(`__q('.amount-tweak .icon-btn').click()`);
+await sleep(400);
+check('그 자리 수정 뒤에도 팝업은 열려 있다', await evaluate(`!!__q('.modal .dialog-form')`));
+check(
+  '저장해도 초점이 닫기 버튼으로 튀지 않는다',
+  (await evaluate(`document.activeElement?.getAttribute('aria-label')`)) !== '닫기',
+);
+
 await evaluate(`__byText('.dialog-items__name', '지난기록').click()`);
 await sleep(350);
 check('지난 기록도 수정 팝업이 열린다', (await evaluate(`__text('.modal__title')`)).includes('수정'));
